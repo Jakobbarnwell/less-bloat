@@ -2,7 +2,7 @@ import { loadedInFull, RECOMMENDED, REQUIRED } from './tools'
 import type { List } from './tools'
 
 // Custom mode is set in /less-bloat's pane (register.tsx), or by asking Claude, which reads and saves
-// the choices through this tool, which register.ts answers.
+// the choices through this tool, which register.tsx answers.
 const NAME = 'setup'
 
 export const COMMAND = { name: 'less-bloat', description: 'Choose which tools are in full and which are name-only' }

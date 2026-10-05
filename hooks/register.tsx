@@ -96,11 +96,9 @@ export const register: Register = on => {
   // /less-bloat opens the settings pane. A run with nowhere to draw it, such as `claude -p`, or
   // without ToolSearch, gets this conversation's list as text.
   on('command.run', { command: COMMAND.name }, async $ => {
-    if ((await $.session.surfaces()).length) {
-      const told = await announced($).catch(() => undefined)
-      if (await open($, await saved($), told ?? [])) return {}
-    }
-    return { text: `${await listing($)}\n\n${CHANGE}` }
+    if (!(await $.session.surfaces()).length) return { text: `${await listing($)}\n\n${CHANGE}` }
+    const told = await announced($).catch(() => undefined)
+    return (await open($, await saved($), told ?? [])) ? {} : { text: await listing($) }
   })
 
   // The settings pane /less-bloat opens: a switch per tool, or per MCP server, between full and
@@ -164,13 +162,13 @@ export const register: Register = on => {
     if (!input.mode) {
       return { result: input.keep || input.defer ? `Not saved: pass mode to save.\n${await listing($)}` : await listing($) }
     }
+    const list = input.mode === 'default' ? DEFAULT : { keep: input.keep ?? [], defer: input.defer ?? [] }
+    if (!isList(list)) return { result: 'Not saved: keep and defer must be lists of tool names.' }
     // An empty custom list is default mode, as the pane saves it.
-    if (input.mode === 'default' || (!input.keep?.length && !input.defer?.length)) {
+    if (!list.keep.length && !list.defer.length) {
       await $.store.delete('list')
       return { result: 'Saved default mode. It applies from the next conversation.' }
     }
-    const list = { keep: input.keep ?? [], defer: input.defer ?? [] }
-    if (!isList(list)) return { result: 'Not saved: keep and defer must be lists of tool names.' }
     await $.store.set('list', list)
     const tools = (await $.tool.list()).map(t => t.name)
     return { result: ['Saved custom mode. It applies from the next conversation.', ...warnings(tools, list)].join(' ') }
@@ -282,7 +280,7 @@ async function save($: EngineInterface) {
   } catch (error) {
     return edit($, p => ({ ...p, status: `Not saved: ${error instanceof Error ? error.message : error}` }))
   }
-  await edit($, p => ({ ...p, saved: isDefault ? null : p.draft, status: 'Applies from your next conversation.' }))
+  await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, status: 'Applies from your next conversation.' }))
 }
 
 // Changes what the pane shows.
