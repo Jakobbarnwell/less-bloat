@@ -1,0 +1,16 @@
+{
+  "name": "less-bloat",
+  "owner": {
+    "name": "jakobbarnwell"
+  },
+  "metadata": {
+    "description": "less-bloat: a Claude Code mod that kills the bloat in the system prompt"
+  },
+  "plugins": [
+    {
+      "name": "less-bloat",
+      "source": "./",
+      "description": "Kills the bloat in Claude Code's system prompt by making rarely needed tools name-only"
+    }
+  ]
+}

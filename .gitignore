@@ -1,0 +1,2 @@
+# Type files Claude Code writes when it loads the mod, for editors and tsc.
+/.claude-plugin/types/

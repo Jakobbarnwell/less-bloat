@@ -1,0 +1,17 @@
+// less-bloat's values in $.state, which a reload of the mod keeps. Each is kept per conversation,
+// by its session id, which /clear and a resume change.
+
+// The tools deferred as a conversation's first prompt went out; null or unset before it.
+export type Named = string[] | null
+
+declare module 'claude-code' {
+  interface PluginState {
+    'less-bloat': {
+      // Whether a tool waits behind ToolSearch, as first described; one value per
+      // `<session id>:<tool>`, so the tools described at once don't contend for one value.
+      deferred: StateFamily<boolean>
+      // One value per session id.
+      named: StateFamily<Named>
+    }
+  }
+}
