@@ -1,9 +1,9 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buttons, counts, elsewhere, fullness, items, state, toolCount } from './pane'
+import { buttons, counts, DEFAULT, elsewhere, fullness, items, same, state, switched, toolCount } from './pane'
 import type { Item, Row } from './pane'
-import { CHANGE, COMMAND, DEFAULT, notice, report, same, SETUP, switched, warnings } from './setup'
+import { CHANGE, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
 import { isList, isNames, loadedInFull, REQUIRED } from './tools'
 import type { List } from './tools'
@@ -159,7 +159,8 @@ export const register: Register = on => {
           return (
             <Box flexDirection="column" marginTop={1}>
               <Text bold>Changes from default<Text dimColor> · {toolCount(item.tools)}</Text></Text>
-              {item.tools ? null : <Text dimColor>  None in this conversation. Open a group to check or uncheck a tool.</Text>}
+              {item.tools ? null : <Text dimColor>  None{absent ? ' in this conversation' : ''}. Open a group to check or uncheck a tool.</Text>}
+              {absent ? <Text dimColor>  Custom mode also changes {toolCount(absent)} that this conversation doesn't have.</Text> : null}
             </Box>
           )
         case 'change':
@@ -188,11 +189,11 @@ export const register: Register = on => {
           </Button>
         </Box>
         {/* The terminal's keys, as Claude Code's own menus list theirs; a desktop is clicked. */}
-        {isTerminal ? <Text dimColor>↑/↓ to move · Enter to select · s to save · d for default · v for the other layout · Esc to close</Text> : null}
+        {isTerminal ? <Text dimColor>↑/↓ move · Enter select · s save · d default · v other layout · Esc close</Text> : null}
         <Box flexDirection="column" marginTop={1}>
           {layout === 'checklist' ? (
             <Text>
-              {full} in full, {nameOnly} name-only.
+              {toolCount(full)} in full, {nameOnly} name-only.
               <Text dimColor> Checked tools are in full: their description is in every system prompt. Unchecked tools are name-only: Claude fetches the description when it needs the tool.</Text>
             </Text>
           ) : (
@@ -201,7 +202,7 @@ export const register: Register = on => {
               <Text><Text bold>{toolCount(nameOnly)} name-only:</Text> Claude fetches the description when it needs the tool.</Text>
             </Box>
           )}
-          {absent ? <Text dimColor>Your list also changes {toolCount(absent)} that this conversation doesn't have.</Text> : null}
+          {absent && layout === 'checklist' ? <Text dimColor>Custom mode also changes {toolCount(absent)} that this conversation doesn't have.</Text> : null}
           <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
         </Box>
         {list.map(draw)}
@@ -232,6 +233,8 @@ export const register: Register = on => {
     // which the engine then keeps on the last one, without raising ui.focus.
     const at = Math.min(ring ?? -1, keys.length - 1)
     const key = keys[Math.min(Math.max(at + e.by, 0), keys.length - 1)]!
+    // Past the first or last button, the engine scrolls to what is above or below it.
+    if (key === keys[at]) return next(e)
     if ((await $.ui.focus({ requestId: PANE_ID, key })).deny) return next(e)
     await $.ui.scroll({ to: { key }, in: PANE_ID })
     return {}

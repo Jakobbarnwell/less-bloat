@@ -1,5 +1,5 @@
-import { rows } from './setup'
 import { loadedInFull, RECOMMENDED, REQUIRED } from './tools'
+import type { List } from './tools'
 import type { Layout, Pane } from '../types'
 
 type Shown = NonNullable<Pane>
@@ -53,7 +53,7 @@ export function items(shown: Shown, layout: Layout): Item[] {
       ]
     }),
     { kind: 'changes', tools: changed.reduce((sum, r) => sum + r.changed, 0) },
-    ...changed.map(row => ({ kind: 'change' as const, key: `undo:${row.label}`, row })),
+    ...changed.map(row => ({ kind: 'change' as const, key: `undo:${row.tools[0]}`, row })),
   ]
 }
 
@@ -77,7 +77,9 @@ export function fullness(row: Row): 'all' | 'some' | 'none' {
 // How many tools the list changes that this conversation doesn't have, such as another app's or
 // MCP server's. A required tool, or one already as default mode has it, changes nothing.
 export function elsewhere(shown: Shown): number {
-  const changes = new Set([...shown.draft.keep.filter(t => !RECOMMENDED[t]), ...shown.draft.defer.filter(t => RECOMMENDED[t])])
+  const { keep, defer } = shown.draft
+  // A tool on both lists is name-only, so keeping it changes nothing.
+  const changes = new Set([...keep.filter(t => !RECOMMENDED[t] && !defer.includes(t)), ...defer.filter(t => RECOMMENDED[t])])
   return [...changes].filter(t => !shown.tools.includes(t) && !REQUIRED.includes(t) && t !== 'mcp__less-bloat__setup').length
 }
 
@@ -94,11 +96,12 @@ export function toolCount(n: number): string {
 function model(shown: Shown): Row[] {
   const full = loadedInFull(shown.draft)
   const byDefault = loadedInFull(undefined)
-  return rows(shown.tools).map(row => {
+  return entries(shown.tools).map(row => {
     const inFull = row.tools.filter(t => full.has(t)).length
-    const size = !row.isServer ? '' : inFull && inFull < row.tools.length ? `${inFull} of ${row.tools.length} in full` : toolCount(row.tools.length)
+    const some = inFull > 0 && inFull < row.tools.length
+    const size = !row.isServer ? '' : some ? `${inFull} of ${row.tools.length} in full` : toolCount(row.tools.length)
     return {
-      key: `row:${row.label}`,
+      key: `row:${row.tools[0]}`,
       label: row.label,
       tools: row.tools,
       // The group says these are in full by default; "strongly recommended" stays.
@@ -114,4 +117,59 @@ function model(shown: Shown): Row[] {
 // told about, which Claude Code would put in full), or name-only as Claude Code puts it.
 function group(shown: Shown, row: Row): (typeof GROUPS)[number]['id'] {
   return row.wasFull ? 'kept' : row.tools.some(t => shown.asked.includes(t)) ? 'made' : 'design'
+}
+
+// Custom mode's list as the pane edits it, back at the default.
+export const DEFAULT: List = { keep: [], defer: [] }
+
+// The list with these tools in full or name-only. Keep holds only tools default mode leaves
+// name-only, and defer only recommended ones, so a list back at the default is empty.
+export function switched(list: List, tools: string[], toFull: boolean): List {
+  const keep = new Set(list.keep)
+  const defer = new Set(list.defer)
+  for (const n of tools) {
+    if (toFull) {
+      defer.delete(n)
+      if (!RECOMMENDED[n]) keep.add(n)
+    } else {
+      keep.delete(n)
+      if (RECOMMENDED[n]) defer.add(n)
+    }
+  }
+  return { keep: [...keep], defer: [...defer] }
+}
+
+// Whether two lists say the same, in any order.
+export function same(a: List, b: List): boolean {
+  const key = (l: List) => JSON.stringify([[...l.keep].sort(), [...l.defer].sort()])
+  return key(a) === key(b)
+}
+
+type Entry = { label: string; note: string; tools: string[]; isServer: boolean }
+
+// The recommended tools one per row, with why; the others, built-in one per row and MCP ones one
+// row per server.
+function entries(tools: string[]): Entry[] {
+  const recommended = Object.keys(RECOMMENDED).filter(n => tools.includes(n))
+    .map(n => ({ label: label(n), note: RECOMMENDED[n]!, tools: [n], isServer: false }))
+  const servers = new Map<string, string[]>()
+  const own: Entry[] = []
+  for (const n of tools.filter(n => !RECOMMENDED[n]).sort()) {
+    const server = n.match(/^mcp__(.+?)__/)?.[1]
+    if (server) servers.set(server, [...(servers.get(server) ?? []), n])
+    else own.push({ label: n, note: '', tools: [n], isServer: false })
+  }
+  const grouped = [...servers].map(([server, names]) => ({
+    label: /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(server) ? `connector ${server.slice(0, 8)}` : server,
+    note: '',
+    tools: names,
+    isServer: true,
+  }))
+  return [...recommended, ...own, ...grouped]
+}
+
+// An MCP tool as `server: tool`.
+function label(name: string): string {
+  const [, server, tool] = name.match(/^mcp__(.+?)__(.+)$/) ?? []
+  return server && tool ? `${server}: ${tool}` : name
 }
