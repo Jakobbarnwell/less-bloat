@@ -32,7 +32,7 @@ export const SETUP = { name: NAME, description: DESCRIPTION, inputSchema: INPUT 
 
 // What a save warns about: a name that matches no tool here (a typo, or a tool of another app or
 // MCP server), and each entry of this session's tools that changes nothing, which the save leaves
-// out. No warning names a tool twice.
+// out. Each entry is named at most once.
 export function warnings(tools: string[], list: List): string[] {
   const keep = [...new Set(list.keep)]
   const defer = [...new Set(list.defer)]
