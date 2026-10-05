@@ -1,4 +1,4 @@
-import { loadedInFull, RECOMMENDED } from './tools'
+import { changes, loadedInFull, RECOMMENDED } from './tools'
 import type { List } from './tools'
 import type { Layout, Pane } from '../types'
 
@@ -76,13 +76,6 @@ export function fullness(row: Pick<Row, 'tools' | 'inFull'>): 'all' | 'some' | '
   return row.inFull === row.tools.length ? 'all' : row.inFull ? 'some' : 'none'
 }
 
-// The tools a list puts otherwise than default mode does. A list that changes none is default mode.
-export function changes(list: List): string[] {
-  const full = loadedInFull(list)
-  const byDefault = loadedInFull(undefined)
-  return [...new Set([...list.keep, ...list.defer])].filter(t => full.has(t) !== byDefault.has(t))
-}
-
 // How many tools the list changes that the pane doesn't list, such as another app's or MCP server's.
 export function elsewhere(shown: Shown): number {
   return changes(shown.draft).filter(t => !shown.tools.includes(t)).length
@@ -125,9 +118,6 @@ function group(shown: Shown, row: Row): (typeof GROUPS)[number]['id'] {
   return row.wasFull ? 'kept' : row.tools.some(t => shown.asked.includes(t)) ? 'made' : 'design'
 }
 
-// Custom mode's list as the pane edits it, back at the default.
-export const DEFAULT: List = { keep: [], defer: [] }
-
 // The list with these tools in full or name-only. Keep holds only tools default mode leaves
 // name-only, and defer only recommended ones, so a list back at the default is empty.
 export function switched(list: List, tools: string[], toFull: boolean): List {
@@ -143,12 +133,6 @@ export function switched(list: List, tools: string[], toFull: boolean): List {
     }
   }
   return { keep: [...keep], defer: [...defer] }
-}
-
-// Whether two lists say the same, in any order.
-export function same(a: List, b: List): boolean {
-  const key = (l: List) => JSON.stringify([[...l.keep].sort(), [...l.defer].sort()])
-  return key(a) === key(b)
 }
 
 type Entry = { label: string; note: string; tools: string[]; isServer: boolean }

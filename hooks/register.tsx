@@ -1,11 +1,11 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buttons, changes, counts, DEFAULT, elsewhere, fullness, items, same, state, switched, toolCount } from './pane'
+import { buttons, counts, elsewhere, fullness, items, state, switched, toolCount } from './pane'
 import type { Item, Row } from './pane'
 import { CHANGE, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
-import { isList, isNames, loadedInFull, REQUIRED } from './tools'
+import { DEFAULT, effective, isList, isNames, loadedInFull, REQUIRED, same } from './tools'
 import type { List } from './tools'
 import type { Layout, Pane, SavedList } from '../types'
 
@@ -116,7 +116,7 @@ export const register: Register = on => {
     if (!shown) return <Text dimColor>Run /less-bloat again.</Text>
     const layout = await layoutOf($)
     const isTerminal = e.surface === 'terminal'
-    const isDefault = !changes(shown.draft).length
+    const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
     const isSaved = same(shown.draft, shown.saved ?? DEFAULT)
     const { full, nameOnly } = counts(shown)
     const absent = elsewhere(shown)
@@ -260,10 +260,11 @@ export const register: Register = on => {
     const list = input.mode === 'default' ? DEFAULT : { keep: input.keep ?? [], defer: input.defer ?? [] }
     if (!isList(list)) return { result: 'Not saved: keep and defer must be lists of tool names.' }
     const tools = (await $.tool.list()).map(t => t.name)
-    // A custom list that changes nothing is default mode, as the pane saves it.
-    const isDefault = !changes(list).length
+    // Saved without the entries that change nothing, as the pane saves it; none left is default mode.
+    const kept = effective(list)
+    const isDefault = !kept.keep.length && !kept.defer.length
     if (isDefault) await $.store.delete('list')
-    else await $.store.set('list', list)
+    else await $.store.set('list', kept)
     return { result: [`Saved ${isDefault ? 'default' : 'custom'} mode. It applies from the next conversation.`, ...warnings(tools, list)].join(' ') }
   })
 }
@@ -346,11 +347,12 @@ async function announced($: EngineInterface): Promise<string[] | undefined> {
   return isNames(told) ? told : undefined
 }
 
-// Custom mode's list, in the mod's store, which every session reads. None saved, or one that can't
-// be read, means default mode.
+// Custom mode's list, in the mod's store, which every session reads, without entries that change
+// nothing. None saved, one that can't be read, or one that changes nothing means default mode.
 async function saved($: EngineInterface): Promise<List | undefined> {
   const list = await $.store.get('list').catch(() => undefined)
-  return isList(list) ? list : undefined
+  const kept = isList(list) ? effective(list) : DEFAULT
+  return kept.keep.length || kept.defer.length ? kept : undefined
 }
 
 // The settings pane's id, what it draws, where the keyboard is in it, and its layout.
@@ -363,7 +365,7 @@ async function layoutOf($: EngineInterface): Promise<Layout> {
   return (await $.state.get(LAYOUT)).value ?? 'checklist'
 }
 
-// The other layout, with the keyboard on this button, as the one it was on may be gone.
+// The other layout, with the keyboard on this button and it in view, as the one it was on may be gone.
 async function switchLayout($: EngineInterface) {
   await $.state.set(LAYOUT, (await layoutOf($)) === 'checklist' ? 'summary' : 'checklist')
   await $.ui.focus({ requestId: PANE_ID, key: 'layout' })
@@ -381,19 +383,21 @@ async function open($: EngineInterface, list: List | undefined): Promise<boolean
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 
-// Saves the pane's list; one that changes nothing is default mode, saved as no list.
+// Saves the pane's list, whose entries all change something; an empty one is default mode, saved
+// as no list.
 async function save($: EngineInterface) {
   const { value: shown } = await $.state.get(PANE)
   if (!shown) return
-  const isDefault = !changes(shown.draft).length
+  const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
   try {
     if (isDefault) await $.store.delete('list')
     else await $.store.set('list', shown.draft)
   } catch (error) {
     return edit($, p => ({ ...p, status: `Not saved: ${error instanceof Error ? error.message : error}` }))
   }
-  // A list that changes nothing is shown as default mode's, unless it was changed while saving.
-  await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, draft: isDefault && same(p.draft, shown.draft) ? DEFAULT : p.draft, status: 'Saved. It applies from your next conversation.' }))
+  // A toggle pressed while saving isn't saved, so it says nothing.
+  const status = 'Saved. It applies from your next conversation.'
+  await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, status: same(p.draft, shown.draft) ? status : p.status }))
 }
 
 // Changes the pane's list. Rows stay where they are; only the changes list below them changes.

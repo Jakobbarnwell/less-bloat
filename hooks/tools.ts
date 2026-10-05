@@ -37,6 +37,29 @@ export function isList(value: unknown): value is List {
   return typeof value === 'object' && value !== null && isNames((value as List).keep) && isNames((value as List).defer)
 }
 
+// Custom mode's list back at the default.
+export const DEFAULT: List = { keep: [], defer: [] }
+
+// The tools a list puts otherwise than default mode does. A list that changes none is default mode.
+export function changes(list: List): string[] {
+  const full = loadedInFull(list)
+  const byDefault = loadedInFull(undefined)
+  return [...new Set([...list.keep, ...list.defer])].filter(t => full.has(t) !== byDefault.has(t))
+}
+
+// The list without the entries that change nothing, as it is saved: a tool already placed so, or
+// kept but also on defer, which wins.
+export function effective(list: List): List {
+  const changed = new Set(changes(list))
+  return { keep: list.keep.filter(t => changed.has(t) && !list.defer.includes(t)), defer: list.defer.filter(t => changed.has(t)) }
+}
+
+// Whether two lists say the same, in any order.
+export function same(a: List, b: List): boolean {
+  const key = (l: List) => JSON.stringify([[...l.keep].sort(), [...l.defer].sort()])
+  return key(a) === key(b)
+}
+
 // The tools to load in full. Custom mode starts from default mode's list and applies its changes,
 // so tools that appear later, or only in another app, follow the default. A tool on both lists is
 // deferred.

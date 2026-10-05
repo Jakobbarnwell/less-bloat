@@ -250,7 +250,8 @@ def main():
         cleared = steps[-1]['requests'][-1:]
         del steps[-1]['requests'][-1:]
         steps.append({**steps[-1], 'name': 'save, after /clear', 'keep': custom, 'requests': cleared})
-        if store().get('list') != CUSTOM:
+        # Saved without ToolSearch, which a list can't make name-only.
+        if store().get('list') != {**CUSTOM, 'defer': [t for t in CUSTOM['defer'] if t != 'ToolSearch']}:
             failures.append(f'the setup saved no list to the store at {stores}')
         session = step('custom mode', custom, ['Say ok.'])
         step('custom resume', custom, ['Say ok again.'], '--resume', session)

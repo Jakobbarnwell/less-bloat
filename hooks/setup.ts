@@ -1,4 +1,3 @@
-import { changes } from './pane'
 import { loadedInFull, RECOMMENDED, REQUIRED } from './tools'
 import type { List } from './tools'
 
@@ -31,7 +30,7 @@ export type Input = { mode?: 'default' | 'custom'; keep?: string[]; defer?: stri
 // Registered when the session starts.
 export const SETUP = { name: NAME, description: DESCRIPTION, inputSchema: INPUT }
 
-// What a saved custom mode warns about: a name that matches no tool here may be a typo, or a tool
+// What a save warns about: a name that matches no tool here may be a typo, or a tool
 // of another app or MCP server.
 export function warnings(tools: string[], { keep, defer }: List): string[] {
   const unknown = [...keep, ...defer].filter(n => !tools.includes(n))
@@ -59,11 +58,10 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
       : kept.has(n) ? (RECOMMENDED[n] ?? 'added in custom mode')
       : 'kept as this conversation started, or it arrived later and keeps its own placement'
   const nameOnly = tools.filter(n => !full.has(n) && !pending.includes(n))
-  const isCustom = !!list && changes(list).length > 0
   return [
-    `Saved mode: ${isCustom ? 'custom' : 'default'}. Surfaces: ${surfaces.join(', ') || 'none (a -p run or the SDK)'}.`,
+    `Saved mode: ${list ? 'custom' : 'default'}. Surfaces: ${surfaces.join(', ') || 'none (a -p run or the SDK)'}.`,
     ...(placed ? [] : ['ToolSearch is off, so every tool goes in full whatever the mode.']),
-    ...(isCustom ? [`Custom mode's keep list: ${list.keep.join(', ') || 'empty'}. Its defer list: ${list.defer.join(', ') || 'empty'}.`] : []),
+    ...(list ? [`Custom mode's keep list: ${list.keep.join(', ') || 'empty'}. Its defer list: ${list.defer.join(', ') || 'empty'}.`] : []),
     'Full description:',
     ...tools.filter(n => full.has(n)).map(n => `- ${n}: ${why(n)}`),
     ...section('Name-only in custom mode:', nameOnly.filter(n => list?.defer.includes(n))),
