@@ -1,10 +1,11 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { CHANGE, COMMAND, NOTE_TO_MODEL, notice, report, SETUP, warnings } from './setup'
+import { CHANGE, COMMAND, DEFAULT, notice, report, rows, same, SETUP, switched, warnings } from './setup'
 import type { Input } from './setup'
-import { isList, isNames, loadedInFull } from './tools'
+import { isList, isNames, loadedInFull, REQUIRED } from './tools'
 import type { List } from './tools'
+import type { Pane } from '../types'
 
 // Each conversation's state is kept by its session id, which /clear and a resume change, and a
 // reload of the mod keeps: the tools deferred as its first prompt went out, and each tool's
@@ -92,9 +93,64 @@ export const register: Register = on => {
     return result
   })
 
-  // /less-bloat shows the list at once, without the model, and leaves the model a note, so the
-  // person can say what to change.
-  on('command.run', { command: COMMAND.name }, async $ => ({ text: `${await listing($)}\n\n${CHANGE}`, context: [NOTE_TO_MODEL] }))
+  // /less-bloat opens the settings pane. A run with nowhere to draw it, such as `claude -p`, gets
+  // the list as text.
+  on('command.run', { command: COMMAND.name }, async $ => {
+    if ((await $.session.surfaces()).length) {
+      const told = await announced($).catch(() => undefined)
+      if (await open($, await saved($), told ?? [])) return {}
+    }
+    return { text: `${await listing($)}\n\n${CHANGE}` }
+  })
+
+  // The settings pane /less-bloat opens: a switch per tool, or per MCP server, between full and
+  // name-only, saved as custom mode's list. It draws from what open() took in, so drawing reads
+  // nothing else.
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const { value: shown } = await $.state.get(PANE)
+    if (!shown) return <Text dimColor>Run /less-bloat again.</Text>
+    const full = loadedInFull(shown.draft)
+    const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
+    const isSaved = same(shown.draft, shown.saved ?? DEFAULT)
+    const set = (tools: string[], toFull: boolean) => edit($, p => ({ ...p, draft: switched(p.draft, tools, toFull), status: '' }))
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text>
+          Full: Claude sees the tool's whole description in every request. Name-only: it sees the name, and
+          fetches the rest when it wants to use the tool. Changes apply from your next conversation.
+        </Text>
+        <Box flexDirection="column">
+          {rows(shown.tools, shown.asked).map((row, i) => {
+            const inFull = row.tools.filter(n => full.has(n)).length
+            const state = inFull === row.tools.length ? 'Full' : inFull ? 'Some full' : 'Name-only'
+            return (
+              <Box flexDirection="row" gap={1}>
+                <Button key={`row:${row.label}`} autoFocus={i === 0 || undefined} dimColor={state === 'Name-only'} onPress={() => set(row.tools, state !== 'Full')}>
+                  {state}
+                </Button>
+                <Text>
+                  {row.label}
+                  {row.note ? <Text dimColor> {row.note}</Text> : null}
+                </Text>
+              </Box>
+            )
+          })}
+        </Box>
+        <Text dimColor>
+          {isDefault ? 'Default mode' : 'Custom mode'}
+          {isSaved ? ', saved.' : ', not saved yet.'} {shown.status}
+        </Text>
+        <Box flexDirection="row" gap={1}>
+          <Button key="save" variant="primary" hotkey="s" onPress={() => save($)}>Save</Button>
+          <Button key="default" onPress={() => edit($, p => ({ ...p, draft: DEFAULT, status: '' }))}>
+            Back to default
+          </Button>
+          <Button key="close" role="dismiss" onPress={() => $.ui.close({ id: PANE_ID })}>Close</Button>
+        </Box>
+      </Box>
+    )
+  })
 
   // The setup tool, as SETUP names it. A save applies from the next conversation: a new session or
   // /clear.
@@ -192,4 +248,31 @@ async function announced($: EngineInterface): Promise<string[] | undefined> {
 async function saved($: EngineInterface): Promise<List | undefined> {
   const list = await $.store.get('list').catch(() => undefined)
   return isList(list) ? list : undefined
+}
+
+// The settings pane's id, and what it draws.
+const PANE_ID = 'less-bloat'
+const PANE = { plugin: 'less-bloat', key: 'pane' } as const
+
+// Opens the pane on this conversation's tools and the saved list. Says whether it is drawn.
+async function open($: EngineInterface, list: List | undefined, asked: string[]): Promise<boolean> {
+  // Not the required tools, nor the setup tool: the pane does what it does.
+  const tools = (await $.tool.list()).map(t => t.name).filter(n => !REQUIRED.includes(n) && n !== 'mcp__less-bloat__setup')
+  await $.state.set(PANE, { tools, asked, saved: list ?? null, draft: list ?? DEFAULT, status: '' })
+  return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true })).isPlaced
+}
+
+// Saves the pane's list: default mode deletes it, so later changes to the recommended tools apply.
+async function save($: EngineInterface) {
+  const { value: shown } = await $.state.get(PANE)
+  if (!shown) return
+  const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
+  if (isDefault) await $.store.delete('list')
+  else await $.store.set('list', shown.draft)
+  await edit($, p => ({ ...p, saved: isDefault ? null : p.draft, status: 'Applies from your next conversation.' }))
+}
+
+// Changes what the pane shows; a pane closed meanwhile stays closed.
+function edit($: EngineInterface, change: (shown: NonNullable<Pane>) => NonNullable<Pane>) {
+  return update($, PANE, p => (p ? change(p) : null))
 }

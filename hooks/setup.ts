@@ -1,16 +1,14 @@
 import { loadedInFull, RECOMMENDED, REQUIRED } from './tools'
 import type { List } from './tools'
 
-// Custom mode's setup is a conversation: `/less-bloat` shows the list and the person says what to
-// change, or asks in chat, and the model reads and saves the choices through this tool, which
-// register.ts answers.
+// Custom mode is set in /less-bloat's pane (register.tsx), or by asking Claude, which reads and saves
+// the choices through this tool, which register.ts answers.
 const NAME = 'setup'
 
-export const COMMAND = { name: 'less-bloat', description: 'Show which tools are in full and which are name-only' }
+export const COMMAND = { name: 'less-bloat', description: 'Choose which tools are in full and which are name-only' }
 
-// What /less-bloat shows below the list, and what it leaves the model.
-export const CHANGE = 'To change it, tell Claude what you want, for example to keep your browser tools in full, or to go back to default mode. Changes apply from your next conversation.'
-export const NOTE_TO_MODEL = `The user ran /less-bloat, which showed them which tools are in full and which are name-only. If they ask to change that, use the mcp__less-bloat__${NAME} tool, fetching it with ToolSearch if it's name-only, and follow its description.`
+// What /less-bloat shows below the list where it can't open its pane.
+export const CHANGE = 'To change it, run /less-bloat in a Claude Code session, or ask Claude.'
 
 const DESCRIPTION = `Shows and changes which tools Claude sees with their full description in every request, and which by name only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps in full, and an MCP server's that connects after the first message and asks for its full description. Run it as a short setup with the user:
 1. Call it with no input. It lists this conversation's tools: which have their full description and why, and which are name-only.
@@ -124,4 +122,57 @@ export function notice(tools: string[], first: boolean): { toast: string; line: 
 function some(names: string[], max = 3): string {
   const shown = names.length > max ? [...names.slice(0, max), `${names.length - max} more`] : names
   return shown.length > 1 ? `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)}` : shown.join('')
+}
+
+// The settings pane's: custom mode's list as the pane edits it, and its rows.
+export const DEFAULT: List = { keep: [], defer: [] }
+
+// The list with these tools in full or name-only. Keep holds only tools default mode leaves
+// name-only, and defer only recommended ones, so a list back at the default is empty.
+export function switched(list: List, tools: string[], toFull: boolean): List {
+  const keep = new Set(list.keep)
+  const defer = new Set(list.defer)
+  for (const n of tools) {
+    if (toFull) {
+      defer.delete(n)
+      if (!RECOMMENDED[n]) keep.add(n)
+    } else {
+      keep.delete(n)
+      if (RECOMMENDED[n]) defer.add(n)
+    }
+  }
+  return { keep: [...keep], defer: [...defer] }
+}
+
+export function same(a: List, b: List): boolean {
+  const key = (l: List) => JSON.stringify([[...l.keep].sort(), [...l.defer].sort()])
+  return key(a) === key(b)
+}
+
+type Row = { label: string; note: string; tools: string[] }
+
+// The recommended tools one per row, with why; the others, built-in one per row and MCP ones one
+// row per server.
+export function rows(tools: string[], asked: string[]): Row[] {
+  const recommended = Object.keys(RECOMMENDED).filter(n => tools.includes(n))
+    .map(n => ({ label: label(n), note: RECOMMENDED[n]!, tools: [n] }))
+  const servers = new Map<string, string[]>()
+  const own: Row[] = []
+  for (const n of tools.filter(n => !RECOMMENDED[n]).sort()) {
+    const server = n.match(/^mcp__(.+?)__/)?.[1]
+    if (server) servers.set(server, [...(servers.get(server) ?? []), n])
+    else own.push({ label: n, note: asked.includes(n) ? 'asked to be in full' : '', tools: [n] })
+  }
+  const grouped = [...servers].map(([server, names]) => ({
+    label: /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(server) ? `connector ${server.slice(0, 8)}` : server,
+    note: `${names.length} ${names.length === 1 ? 'tool' : 'tools'}${names.some(n => asked.includes(n)) ? ', asked to be in full' : ''}`,
+    tools: names,
+  }))
+  return [...recommended, ...own, ...grouped]
+}
+
+// An MCP tool as `server: tool`.
+function label(name: string): string {
+  const [, server, tool] = name.match(/^mcp__(.+?)__(.+)$/) ?? []
+  return server && tool ? `${server}: ${tool}` : name
 }

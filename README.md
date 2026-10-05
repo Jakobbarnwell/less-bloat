@@ -31,9 +31,9 @@ Want to see it work? Ask Claude:
 - **Default** keeps the full description for Bash, Read, Edit, Write, Glob, Grep, Agent, Skill,
   AskUserQuestion and SendUserFile, plus the desktop app's chapter, side-task and widget tools when
   you're in the app, and a project thread's reply tools.
-- **Custom** is your own list. Run `/less-bloat` to see which tools are in full and which are
-  name-only, then tell Claude what to change. It says what it recommends keeping in full and why,
-  and saves your choice for every session, CLI and desktop alike.
+- **Custom** is your own list. Run `/less-bloat` to open a pane with every tool, in full or
+  name-only, and why the recommended ones are in full. Switch any of them and save, or ask Claude
+  to. Your choice holds for every session, CLI and desktop alike.
 
 A change applies from your next conversation: a new session or `/clear`. The tools sit at the start
 of every request, so changing them mid-conversation would throw away the prompt cache.
@@ -54,22 +54,23 @@ since Claude fetches all the others with it.
   shows, and less-bloat makes the rarely needed rest name-only.
 - **No setup.** The default works as is.
 - **Small enough to read.** A mod can read and write files, run commands and go online as you, so
-  check what you install. less-bloat is about 360 lines of TypeScript in `hooks/`, and does none of
-  these. (`scripts/check.py` is a test you run yourself; the plugin never runs it.) It keeps your choices, and which tools it has told you about, in Claude Code's own plugin
-  store.
+  check what you install. less-bloat is about 500 lines of TypeScript in `hooks/`, and does none of
+  these. (`scripts/check.py` is a test you run yourself; the plugin never runs it.) It keeps your
+  choices, and which tools it has told you about, in Claude Code's own plugin store.
 
 ## FAQ
 
-**How do I see which tools are in full?** Run `/less-bloat`. It shows the list straight away,
-without asking Claude.
+**How do I see which tools are in full?** Run `/less-bloat`. It opens the pane straight away,
+without asking Claude. In a `claude -p` run it prints the list.
 
 **Does a name-only tool still cost tokens?** Only its name, in Claude Code's list of name-only tools.
 Its description and schema come in when Claude fetches them.
 
 **Will I know what it changed?** Your first session shows a toast with how many tools asked for
-their full description and got name-only, and a line in the transcript naming them. After that, you get one
-only for a new tool, such as a newly added MCP server's, once. A `claude -p` run has nowhere to
-show it, so it waits for a session that does. `/less-bloat` lists them all, and Claude changes any of them.
+their full description and got name-only, and a line in the transcript saying where they're from.
+After that, you get one only for a new tool, such as a newly added MCP server's, once. A
+`claude -p` run has nowhere to show it, so it waits for a session that does. `/less-bloat` lists
+them all, and you can switch any of them there.
 
 **What happens when I add an MCP server?** Most servers' tools are name-only in Claude Code anyway,
 so nothing changes. One that asks for its full description gets name-only too, with a notice. A

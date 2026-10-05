@@ -3,11 +3,11 @@
 
 Runs five steps through a local proxy that records every request to api.anthropic.com, each with
 an MCP server that asks to stay loaded, with as many tools as the desktop app has:
-  1. two prompts in one process, then /clear, /less-bloat and a third,
+  1. two prompts in one process, then /clear and a third,
   2. a resume of the first conversation with a third prompt, a compaction, and a fourth prompt,
-  3. a conversation that saves custom mode through the setup tool, as /less-bloat does, then
-     /clear and a prompt: it loads NotebookEdit and one of the server's tools, and defers Write,
-     Skill and ToolSearch,
+  3. a conversation that saves custom mode through the setup tool, as Claude does, then /clear,
+     a prompt and /less-bloat: it loads NotebookEdit and one of the server's tools, and defers
+     Write, Skill and ToolSearch,
   4. a new conversation, which is in custom mode,
   5. a resume of that one-prompt conversation, with a second prompt.
 It checks that:
@@ -17,7 +17,7 @@ It checks that:
   - later prompts in a process, and a resume, send the same tools and system prompt, and a resume
     after two prompts the same conversation;
   - no step records a tool as announced, as a -p run has nowhere to show the notice;
-  - /less-bloat works after a /clear, and leaves the model its note;
+  - /less-bloat, after a /clear, lists the new conversation: custom mode, with NotebookEdit in full;
   - each step has the setup tool; the setup saves to the store, and the saving conversation stays
     in default mode while the one after its /clear is in custom mode; the conversation after the
     first /clear needs no longer a note than the first.
@@ -119,7 +119,7 @@ def record(exchanges):
 def claude(cli, cwd, port, prompts, *args):
     """One process answering `prompts` in turn, each sent once the last is answered, as a person
     types them, without the user's settings (where the mod may be installed) or MCP servers but the
-    probe. Returns the session id and the process's tools."""
+    probe. Returns the session id, the process's tools and each prompt's result text."""
     env = {k: v for k, v in os.environ.items() if k != 'CLAUDE_CODE_PLUGIN_DIRS'}
     # Behind a base URL that isn't Anthropic's, the engine turns ToolSearch off unless told otherwise.
     env |= {'ANTHROPIC_BASE_URL': f'http://127.0.0.1:{port}', 'ENABLE_TOOL_SEARCH': 'true'}
@@ -148,7 +148,8 @@ def claude(cli, cwd, port, prompts, *args):
         process.kill()
     init = next(e for e in events if e.get('subtype') == 'init')
     # The init message gives Agent by its old name.
-    return init['session_id'], {'Agent' if t == 'Task' else t for t in init['tools']}
+    results = [e.get('result', '') for e in events if e.get('type') == 'result']
+    return init['session_id'], {'Agent' if t == 'Task' else t for t in init['tools']}, results
 
 
 def texts(request):
@@ -215,11 +216,11 @@ def main():
 
     def step(name, keep, prompts, *args):
         start = len(exchanges)
-        session, tools = claude(cli, cwd, server.server_address[1], prompts, *args)
+        session, tools, results = claude(cli, cwd, server.server_address[1], prompts, *args)
         # The main loop's requests, and the compaction's; the side calls, such as titles, carry no ToolSearch.
         requests = [x for x in exchanges[start:]
                     if any(t['name'] == 'ToolSearch' for t in x['request'].get('tools', []))]
-        steps.append({'name': name, 'keep': keep, 'tools': tools, 'requests': requests})
+        steps.append({'name': name, 'keep': keep, 'tools': tools, 'requests': requests, 'results': results})
         if 'mcp__less-bloat__setup' not in tools:
             failures.append(f'{name} has no setup tool')
         return session
@@ -239,10 +240,13 @@ def main():
             return json.load(f)
 
     try:
-        session = step('two prompts', default, ['Say ok.', 'Say ok again.', '/clear', '/less-bloat', 'Say ok after clearing.'])
+        session = step('two prompts', default, ['Say ok.', 'Say ok again.', '/clear', 'Say ok after clearing.'])
         step('resume', default, ['Say ok a third time.', '/compact', 'Say ok once more.'], '--resume', session)
-        step('save', default, [SAVE, '/clear', 'Say ok.'], '--max-turns', '4', '--allowedTools', 'mcp__less-bloat__setup')
-        # The prompt after /clear starts the next conversation, which is in custom mode.
+        step('save', default, [SAVE, '/clear', 'Say ok.', '/less-bloat'], '--max-turns', '4', '--allowedTools', 'mcp__less-bloat__setup')
+        listed = steps[-1]['results'][-1]
+        if 'Saved mode: custom' not in listed or '- NotebookEdit: added in custom mode' not in listed:
+            failures.append(f'/less-bloat after /clear did not list custom mode with NotebookEdit in full:\n{listed}')
+        # The prompt after /clear starts the next conversation, which is in custom mode; /less-bloat sends no request.
         cleared = steps[-1]['requests'][-1:]
         del steps[-1]['requests'][-1:]
         steps.append({**steps[-1], 'name': 'save, after /clear', 'keep': custom, 'requests': cleared})
@@ -290,8 +294,6 @@ def main():
 
     # The resume sends the third prompt, the compaction, and the fourth prompt.
     two, resumed, save, cleared, custom_run, custom_resumed = (s['requests'] for s in steps)
-    if two[2:] and 'The user ran /less-bloat' not in json.dumps(two[2]['request']['messages']):
-        failures.append('/less-bloat after /clear left the model no note')
     if not any('Saved custom mode' in json.dumps(x['request']['messages']) for x in save):
         failures.append('the setup did not save custom mode')
     sent = tuple(len(r) for r in (two, resumed, cleared, custom_run, custom_resumed))
