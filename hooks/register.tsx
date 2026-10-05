@@ -1,7 +1,7 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buttons, counts, fullness, items, state, tools } from './pane'
+import { buttons, counts, elsewhere, fullness, items, state, toolCount } from './pane'
 import type { Item, Row } from './pane'
 import { CHANGE, COMMAND, DEFAULT, notice, report, same, SETUP, switched, warnings } from './setup'
 import type { Input } from './setup'
@@ -116,6 +116,7 @@ export const register: Register = on => {
     const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
     const isSaved = same(shown.draft, shown.saved ?? DEFAULT)
     const { full, nameOnly } = counts(shown)
+    const absent = elsewhere(shown)
     const list = items(shown, layout)
     const first = list.find(item => 'key' in item && item.key)
     // A row goes to full unless all of it is, read from the list as it is when pressed.
@@ -129,7 +130,7 @@ export const register: Register = on => {
       const autoFocus = item === first || undefined
       switch (item.kind) {
         case 'heading': {
-          const title = `${item.title} · ${tools(item.tools)}`
+          const title = `${item.title} · ${toolCount(item.tools)}`
           const { id } = item
           return (
             <Box flexDirection="column" marginTop={1}>
@@ -143,7 +144,7 @@ export const register: Register = on => {
           )
         }
         case 'row': {
-          const note = [item.row.note, item.row.isChanged ? 'changed' : ''].filter(Boolean).join(' · ')
+          const note = [item.row.note, item.row.changed ? 'changed' : ''].filter(Boolean).join(' · ')
           // The note goes under the name where the two don't fit on one line.
           return (
             <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
@@ -157,9 +158,8 @@ export const register: Register = on => {
         case 'changes':
           return (
             <Box flexDirection="column" marginTop={1}>
-              <Text bold>Changes from default<Text dimColor> · {tools(item.tools)}</Text></Text>
-              {item.tools ? null : <Text dimColor>  None here. Open a group to check or uncheck a tool.</Text>}
-              {item.elsewhere ? <Text dimColor>  Your list also changes {tools(item.elsewhere)} this conversation doesn't have.</Text> : null}
+              <Text bold>Changes from default<Text dimColor> · {toolCount(item.tools)}</Text></Text>
+              {item.tools ? null : <Text dimColor>  None in this conversation. Open a group to check or uncheck a tool.</Text>}
             </Box>
           )
         case 'change':
@@ -183,7 +183,7 @@ export const register: Register = on => {
         <Box flexDirection="row" flexWrap="wrap" gap={1}>
           <Button key="save" variant="primary" hotkey="s" onPress={() => save($)}>Save</Button>
           <Button key="default" hotkey="d" onPress={() => redraft($, () => DEFAULT)}>Back to default</Button>
-          <Button key="layout" hotkey="v" onPress={() => $.state.set(LAYOUT, layout === 'checklist' ? 'summary' : 'checklist')}>
+          <Button key="layout" hotkey="v" onPress={async () => $.state.set(LAYOUT, (await layoutOf($)) === 'checklist' ? 'summary' : 'checklist')}>
             {layout === 'checklist' ? 'Try summary layout' : 'Try checklist layout'}
           </Button>
         </Box>
@@ -197,10 +197,11 @@ export const register: Register = on => {
             </Text>
           ) : (
             <Box flexDirection="column">
-              <Text><Text bold>{tools(full)} in full:</Text> the description is in every system prompt.</Text>
-              <Text><Text bold>{tools(nameOnly)} name-only:</Text> Claude fetches the description when it needs the tool.</Text>
+              <Text><Text bold>{toolCount(full)} in full:</Text> their descriptions are in every system prompt.</Text>
+              <Text><Text bold>{toolCount(nameOnly)} name-only:</Text> Claude fetches the description when it needs the tool.</Text>
             </Box>
           )}
+          {absent ? <Text dimColor>Your list also changes {toolCount(absent)} that this conversation doesn't have.</Text> : null}
           <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
         </Box>
         {list.map(draw)}

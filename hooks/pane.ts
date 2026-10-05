@@ -1,5 +1,5 @@
 import { rows } from './setup'
-import { loadedInFull } from './tools'
+import { loadedInFull, RECOMMENDED, REQUIRED } from './tools'
 import type { Layout, Pane } from '../types'
 
 type Shown = NonNullable<Pane>
@@ -17,7 +17,6 @@ export type Row = {
   wasFull: boolean
   // How many of its tools the draft has otherwise than default mode.
   changed: number
-  isChanged: boolean
 }
 
 // What the pane draws below its header, in order: a group's heading (a button that opens and closes
@@ -25,7 +24,7 @@ export type Row = {
 export type Item =
   | { kind: 'heading'; key?: string; id: string; title: string; about: string; tools: number; isOpen?: boolean }
   | { kind: 'row'; key: string; row: Row }
-  | { kind: 'changes'; tools: number; elsewhere: number }
+  | { kind: 'changes'; tools: number }
   | { kind: 'change'; key: string; row: Row }
 
 const GROUPS = [
@@ -44,9 +43,7 @@ export function items(shown: Shown, layout: Layout): Item[] {
       ...g.rows.map(row => ({ kind: 'row' as const, key: row.key, row })),
     ])
   }
-  const changed = all.filter(r => r.isChanged)
-  // A saved list can name tools this conversation hasn't, such as another app's or MCP server's.
-  const elsewhere = [...shown.draft.keep, ...shown.draft.defer].filter(t => !shown.tools.includes(t)).length
+  const changed = all.filter(r => r.changed)
   return [
     ...grouped.flatMap(g => {
       const isOpen = shown.open.includes(g.id)
@@ -55,7 +52,7 @@ export function items(shown: Shown, layout: Layout): Item[] {
         ...(isOpen ? g.rows.map(row => ({ kind: 'row' as const, key: row.key, row })) : []),
       ]
     }),
-    { kind: 'changes', tools: changed.reduce((sum, r) => sum + r.changed, 0), elsewhere },
+    { kind: 'changes', tools: changed.reduce((sum, r) => sum + r.changed, 0) },
     ...changed.map(row => ({ kind: 'change' as const, key: `undo:${row.label}`, row })),
   ]
 }
@@ -77,13 +74,20 @@ export function fullness(row: Row): 'all' | 'some' | 'none' {
   return row.inFull === row.tools.length ? 'all' : row.inFull ? 'some' : 'none'
 }
 
+// How many tools the list changes that this conversation doesn't have, such as another app's or
+// MCP server's. A required tool, or one already as default mode has it, changes nothing.
+export function elsewhere(shown: Shown): number {
+  const changes = new Set([...shown.draft.keep.filter(t => !RECOMMENDED[t]), ...shown.draft.defer.filter(t => RECOMMENDED[t])])
+  return [...changes].filter(t => !shown.tools.includes(t) && !REQUIRED.includes(t) && t !== 'mcp__less-bloat__setup').length
+}
+
 // A row's state as a word or two: in full, name-only, or how many of a server's tools are in full.
 export function state(row: Row): string {
   return { all: 'in full', some: `${row.inFull} of ${row.tools.length} in full`, none: 'name-only' }[fullness(row)]
 }
 
 // A count of tools, as "1 tool" or "3 tools".
-export function tools(n: number): string {
+export function toolCount(n: number): string {
   return `${n} ${n === 1 ? 'tool' : 'tools'}`
 }
 
@@ -91,18 +95,17 @@ function model(shown: Shown): Row[] {
   const full = loadedInFull(shown.draft)
   const byDefault = loadedInFull(undefined)
   return rows(shown.tools).map(row => {
-    const size = row.isServer ? tools(row.tools.length) : ''
-    const changed = row.tools.filter(t => full.has(t) !== byDefault.has(t)).length
+    const inFull = row.tools.filter(t => full.has(t)).length
+    const size = !row.isServer ? '' : inFull && inFull < row.tools.length ? `${inFull} of ${row.tools.length} in full` : toolCount(row.tools.length)
     return {
       key: `row:${row.label}`,
       label: row.label,
       tools: row.tools,
       // The group says these are in full by default; "strongly recommended" stays.
       note: [size, row.note.replace(/^recommended: /, '')].filter(Boolean).join(', '),
-      inFull: row.tools.filter(t => full.has(t)).length,
+      inFull,
       wasFull: row.tools.every(t => byDefault.has(t)),
-      changed,
-      isChanged: changed > 0,
+      changed: row.tools.filter(t => full.has(t) !== byDefault.has(t)).length,
     }
   })
 }

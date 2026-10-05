@@ -15,9 +15,9 @@ export const RECOMMENDED: Record<string, string> = {
   Agent: 'recommended: lets Claude use subagents unprompted',
   Skill: 'recommended: lets Claude start skills unprompted',
   AskUserQuestion: 'recommended: lets Claude ask instead of guessing',
+  mcp__ccd_session__mark_chapter: 'recommended: lets Claude mark chapters in long sessions unprompted',
+  mcp__ccd_session__spawn_task: 'recommended: lets Claude offer side tasks unprompted',
   SendUserFile: 'recommended: sends you the files Claude makes',
-  mcp__ccd_session__mark_chapter: 'recommended: chapters in long sessions',
-  mcp__ccd_session__spawn_task: 'recommended: offers side tasks',
   mcp__visualize__read_me: 'recommended: show_widget needs it first',
   mcp__visualize__show_widget: 'recommended: draws charts and diagrams inline',
   // A project thread's turn must end with one of these, or the engine sends it back.
