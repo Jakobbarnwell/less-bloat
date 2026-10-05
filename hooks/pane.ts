@@ -19,8 +19,9 @@ export type Row = {
   changed: number
 }
 
-// What the pane draws below its header, in order: a group's heading (in the summary layout a button
-// that opens and closes the group), a row, and in the summary layout the changes from default mode.
+// What the pane draws below its header, in order: a group's heading, plain in the checklist layout
+// and in the summary layout a button that opens and closes the group; a row; and in the summary
+// layout the changes from default mode, a heading and a row with Undo for each.
 export type Item =
   | { kind: 'heading'; title: string; about: string; tools: number }
   | { kind: 'group'; key: string; id: string; title: string; about: string; tools: number; isOpen: boolean }
@@ -60,7 +61,7 @@ export function items(shown: Shown, layout: Layout): Item[] {
 
 // The keys of the pane's buttons in the keyboard's order, as drawn on the terminal.
 export function buttons(shown: Shown, layout: Layout): string[] {
-  return ['save', 'default', 'layout', ...items(shown, layout).flatMap(i => ('key' in i && i.key ? [i.key] : []))]
+  return ['save', 'default', 'layout', ...items(shown, layout).flatMap(i => ('key' in i ? [i.key] : []))]
 }
 
 // How many of the conversation's tools the draft has in full, and name-only.
@@ -100,6 +101,7 @@ export function toolCount(n: number): string {
 function model(shown: Shown): Row[] {
   const full = loadedInFull(shown.draft)
   const byDefault = loadedInFull(undefined)
+  const changed = new Set(changes(shown.draft))
   return entries(shown.tools).map(row => {
     const inFull = row.tools.filter(t => full.has(t)).length
     const counted = { tools: row.tools, inFull }
@@ -112,7 +114,7 @@ function model(shown: Shown): Row[] {
       note: [size, row.note.replace(/^recommended: /, '')].filter(Boolean).join(', '),
       inFull,
       wasFull: row.tools.every(t => byDefault.has(t)),
-      changed: row.tools.filter(t => full.has(t) !== byDefault.has(t)).length,
+      changed: row.tools.filter(t => changed.has(t)).length,
     }
   })
 }

@@ -11,7 +11,8 @@ import type { Layout, Pane, SavedList } from '../types'
 
 // Each conversation's state is kept by its session id, which /clear and a resume change, and a
 // reload of the mod keeps: the tools deferred as its first prompt went out, and each tool's
-// placement, a value of its own under `<session id>:<tool>`.
+// placement and whether it asked for its full description, values of their own under
+// `<session id>:<tool>`.
 
 // The engine names the deferred tools as the first prompt goes out, from the tools described by
 // then, and describes the rest only as it sends the request. This note names those.
@@ -40,8 +41,10 @@ export const register: Register = on => {
     const asked = !(result.isDeferred ?? e.isDeferred ?? false)
     const isDeferred = loadedInFull(list).has(e.tool) ? false : !named || named.includes(e.tool) || !asked
     const id = `${session}:${e.tool}`
-    const placed = await update($, { plugin: 'less-bloat', key: 'deferred', id }, first => first ?? isDeferred)
-    await update($, { plugin: 'less-bloat', key: 'asked', id }, first => first ?? asked)
+    const [placed] = await Promise.all([
+      update($, { plugin: 'less-bloat', key: 'deferred', id }, first => first ?? isDeferred),
+      update($, { plugin: 'less-bloat', key: 'asked', id }, first => first ?? asked),
+    ])
     // One the user made name-only themselves needs no telling.
     if (asked && placed && !list?.defer.includes(e.tool)) tell($, e.tool)
     return { ...result, isDeferred: placed }
@@ -235,11 +238,10 @@ export const register: Register = on => {
     if ((await $.session.surfaces()).some(surface => surface !== 'terminal')) return next(e)
     const { value: ring } = await $.state.get(RING)
     const keys = buttons(shown, await layoutOf($))
-    // Undo, Back to default and the other layout can take away the buttons below the keyboard,
-    // which the engine then keeps on the last one, without raising ui.focus.
+    // Undo and Back to default can take away the buttons below the keyboard, which the engine then
+    // keeps on the last one, without raising ui.focus. From none of them, as from the close mark,
+    // an arrow goes to Save.
     const at = Math.min(ring ?? -1, keys.length - 1)
-    // On none of the pane's buttons, the engine moves the keyboard as it does.
-    if (at < 0) return next(e)
     const key = keys[Math.min(Math.max(at + e.by, 0), keys.length - 1)]!
     // Past the first or last button, the engine scrolls to what is above or below it.
     if (key === keys[at]) return next(e)
@@ -257,14 +259,12 @@ export const register: Register = on => {
     }
     const list = input.mode === 'default' ? DEFAULT : { keep: input.keep ?? [], defer: input.defer ?? [] }
     if (!isList(list)) return { result: 'Not saved: keep and defer must be lists of tool names.' }
-    // A custom list that changes nothing is default mode, as the pane saves it.
-    if (!changes(list).length) {
-      await $.store.delete('list')
-      return { result: 'Saved default mode. It applies from the next conversation.' }
-    }
-    await $.store.set('list', list)
     const tools = (await $.tool.list()).map(t => t.name)
-    return { result: ['Saved custom mode. It applies from the next conversation.', ...warnings(tools, list)].join(' ') }
+    // A custom list that changes nothing is default mode, as the pane saves it.
+    const isDefault = !changes(list).length
+    if (isDefault) await $.store.delete('list')
+    else await $.store.set('list', list)
+    return { result: [`Saved ${isDefault ? 'default' : 'custom'} mode. It applies from the next conversation.`, ...warnings(tools, list)].join(' ') }
   })
 }
 
@@ -367,6 +367,7 @@ async function layoutOf($: EngineInterface): Promise<Layout> {
 async function switchLayout($: EngineInterface) {
   await $.state.set(LAYOUT, (await layoutOf($)) === 'checklist' ? 'summary' : 'checklist')
   await $.ui.focus({ requestId: PANE_ID, key: 'layout' })
+  await $.ui.scroll({ to: { key: 'layout' }, in: PANE_ID })
 }
 
 // Opens the pane on this conversation's tools and the saved list. Says whether it is drawn: not
@@ -391,7 +392,8 @@ async function save($: EngineInterface) {
   } catch (error) {
     return edit($, p => ({ ...p, status: `Not saved: ${error instanceof Error ? error.message : error}` }))
   }
-  await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, draft: isDefault ? DEFAULT : shown.draft, status: 'Saved. It applies from your next conversation.' }))
+  // A list that changes nothing is shown as default mode's, unless it was changed while saving.
+  await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, draft: isDefault && same(p.draft, shown.draft) ? DEFAULT : p.draft, status: 'Saved. It applies from your next conversation.' }))
 }
 
 // Changes the pane's list. Rows stay where they are; only the changes list below them changes.

@@ -1,3 +1,4 @@
+import { changes } from './pane'
 import { loadedInFull, RECOMMENDED, REQUIRED } from './tools'
 import type { List } from './tools'
 
@@ -58,14 +59,15 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
       : kept.has(n) ? (RECOMMENDED[n] ?? 'added in custom mode')
       : 'kept as this conversation started, or it arrived later and keeps its own placement'
   const nameOnly = tools.filter(n => !full.has(n) && !pending.includes(n))
+  const isCustom = !!list && changes(list).length > 0
   return [
-    `Saved mode: ${list ? 'custom' : 'default'}. Surfaces: ${surfaces.join(', ') || 'none (a -p run or the SDK)'}.`,
+    `Saved mode: ${isCustom ? 'custom' : 'default'}. Surfaces: ${surfaces.join(', ') || 'none (a -p run or the SDK)'}.`,
     ...(placed ? [] : ['ToolSearch is off, so every tool goes in full whatever the mode.']),
-    ...(list ? [`Custom mode's keep list: ${list.keep.join(', ') || 'empty'}. Its defer list: ${list.defer.join(', ') || 'empty'}.`] : []),
+    ...(isCustom ? [`Custom mode's keep list: ${list.keep.join(', ') || 'empty'}. Its defer list: ${list.defer.join(', ') || 'empty'}.`] : []),
     'Full description:',
     ...tools.filter(n => full.has(n)).map(n => `- ${n}: ${why(n)}`),
     ...section('Name-only in custom mode:', nameOnly.filter(n => list?.defer.includes(n))),
-    ...section('Name-only by less-bloat, which Claude Code would put in full:', nameOnly.filter(n => asked.includes(n))),
+    ...section('Name-only by less-bloat, which Claude Code would put in full:', nameOnly.filter(n => asked.includes(n) && !list?.defer.includes(n))),
     ...section('Name-only by design:', nameOnly.filter(n => !asked.includes(n) && !list?.defer.includes(n))),
     ...section('Placed with the next request:', pending),
   ].join('\n')

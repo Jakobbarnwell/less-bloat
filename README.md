@@ -54,7 +54,7 @@ since Claude fetches all the others with it.
   shows, and less-bloat makes the rarely needed rest name-only.
 - **No setup.** The default works as is.
 - **Small enough to read.** A mod can read and write files, run commands and go online as you, so
-  check what you install. less-bloat is about 700 lines of TypeScript in `hooks/`, and does none of
+  check what you install. less-bloat is about 750 lines of TypeScript in `hooks/`, and does none of
   these. (`scripts/check.py` is a test you run yourself; the plugin never runs it.) It keeps your
   choices, and which tools it has told you about, in Claude Code's own plugin store.
 
