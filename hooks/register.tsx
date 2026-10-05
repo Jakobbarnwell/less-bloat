@@ -289,7 +289,7 @@ async function open($: EngineInterface, list: List | undefined, asked: string[])
   // Not the required tools, nor the setup tool: the pane does what it does.
   const tools = all.filter(n => !REQUIRED.includes(n) && n !== 'mcp__less-bloat__setup')
   await $.state.set(PANE, { tools, asked, saved: list ?? null, draft: list ?? DEFAULT, status: '' })
-  return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true })).isPlaced
+  return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 
 // Saves the pane's list; an empty one is default mode, saved as no list.
