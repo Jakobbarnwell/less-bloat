@@ -30,15 +30,15 @@ export type Input = { mode?: 'default' | 'custom'; keep?: string[]; defer?: stri
 // Registered when the session starts.
 export const SETUP = { name: NAME, description: DESCRIPTION, inputSchema: INPUT }
 
-// What a save warns about, each name once: a name on both lists, one that matches no tool here (a
-// typo, or a tool of another app or MCP server), and the entries of this session's tools that
-// change nothing, which the save leaves out.
+// What a save warns about: a name that matches no tool here (a typo, or a tool of another app or
+// MCP server), and each entry of this session's tools that changes nothing, which the save leaves
+// out. No warning names a tool twice.
 export function warnings(tools: string[], list: List): string[] {
   const keep = [...new Set(list.keep)]
   const defer = [...new Set(list.defer)]
-  const unknown = [...new Set([...keep, ...defer])].filter(n => !tools.includes(n))
   const here = (n: string) => tools.includes(n)
-  const both = keep.filter(n => defer.includes(n) && !REQUIRED.includes(n))
+  const unknown = [...new Set([...keep, ...defer])].filter(n => !here(n))
+  const both = keep.filter(n => here(n) && defer.includes(n) && !REQUIRED.includes(n))
   const idle = defer.filter(n => here(n) && (REQUIRED.includes(n) || (!RECOMMENDED[n] && !keep.includes(n))))
   const full = keep.filter(n => here(n) && (REQUIRED.includes(n) || (RECOMMENDED[n] && !defer.includes(n))))
   return [
