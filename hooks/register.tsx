@@ -101,9 +101,9 @@ export const register: Register = on => {
     return (await open($, await saved($), told ?? [])) ? {} : { text: await listing($) }
   })
 
-  // The settings pane /less-bloat opens: a switch per tool, or per MCP server, between full and
-  // name-only, saved as custom mode's list. It draws from what open() took in, so drawing reads
-  // nothing else.
+  // The settings pane /less-bloat opens: the tools in two lists, in full and name-only, each tool
+  // (or MCP server) with a button that moves it to the other, saved as custom mode's list. It draws
+  // from what open() took in, so drawing reads nothing else.
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const { value: shown } = await $.state.get(PANE)
@@ -116,41 +116,57 @@ export const register: Register = on => {
       const kept = loadedInFull(p.draft)
       return { ...p, draft: switched(p.draft, tools, !tools.every(n => kept.has(n))), status: '' }
     })
+    // An MCP server's row is name-only while any of its tools is, and says how many are in full.
+    const all = rows(shown.tools, shown.asked).map(row => {
+      const inFull = row.tools.filter(n => full.has(n)).length
+      const some = inFull && inFull < row.tools.length ? `${inFull} in full` : ''
+      return { ...row, inFull, note: [some, row.note].filter(Boolean).join(', ') }
+    })
+    const inFull = all.filter(row => row.inFull === row.tools.length)
+    // The ones that asked to be in full first, as they are the ones less-bloat changed.
+    const asked = (row: (typeof all)[number]) => (row.tools.some(n => shown.asked.includes(n)) ? 0 : 1)
+    const nameOnly = all.filter(row => row.inFull < row.tools.length).sort((a, b) => asked(a) - asked(b))
+    const section = (title: string, about: string, list: typeof all, action: string) => (
+      <Box flexDirection="column">
+        <Text bold>
+          {title} <Text dimColor>· {about} · {list.length}</Text>
+        </Text>
+        {list.map(row => (
+          <Box flexDirection="row" justifyContent="space-between" gap={2}>
+            <Box flexShrink={1}>
+              <Text>
+                {row.label}
+                {row.note ? <Text dimColor>  {row.note}</Text> : null}
+              </Text>
+            </Box>
+            <Button key={`row:${row.label}`} autoFocus={row === all[0] || undefined} onPress={() => toggle(row.tools)}>
+              {action}
+            </Button>
+          </Box>
+        ))}
+      </Box>
+    )
     return (
       <Box flexDirection="column" gap={1}>
-        <Text>
-          Which tools new conversations get in full, and which name-only. Full: Claude sees the tool's whole
-          description in every request. Name-only: it sees the name, and fetches the rest when it wants to
-          use the tool. A saved change applies from your next conversation.
-        </Text>
-        <Box flexDirection="column">
-          {rows(shown.tools, shown.asked).map((row, i) => {
-            const inFull = row.tools.filter(n => full.has(n)).length
-            const state = inFull === row.tools.length ? 'Full' : inFull ? 'Some full' : 'Name-only'
-            return (
-              <Box flexDirection="row" gap={1}>
-                <Button key={`row:${row.label}`} autoFocus={i === 0 || undefined} dimColor={state === 'Name-only'} onPress={() => toggle(row.tools)}>
-                  {state}
-                </Button>
-                <Text>
-                  {row.label}
-                  {row.note ? <Text dimColor> {row.note}</Text> : null}
-                </Text>
-              </Box>
-            )
-          })}
+        {/* Clear of the close mark the terminal draws in the pane's top corner. */}
+        <Box flexDirection="row" justifyContent="space-between" gap={2} paddingRight={2}>
+          <Text bold>
+            {isDefault ? 'Default mode' : 'Custom mode'}
+            <Text dimColor>{isSaved ? ' · saved' : ' · not saved'}</Text>
+          </Text>
+          <Box flexDirection="row" gap={1}>
+            <Button key="save" variant="primary" hotkey="s" onPress={() => save($)}>Save</Button>
+            <Button key="default" onPress={() => edit($, p => ({ ...p, draft: DEFAULT, status: '' }))}>
+              Back to default
+            </Button>
+          </Box>
         </Box>
         <Text dimColor>
-          {isDefault ? 'Default mode' : 'Custom mode'}
-          {isSaved ? ', saved.' : ', not saved yet.'} {shown.status}
+          {shown.status ||
+            'Tools in full go out with every request; name-only ones are fetched when Claude needs them. A saved change applies from your next conversation.'}
         </Text>
-        <Box flexDirection="row" gap={1}>
-          <Button key="save" variant="primary" hotkey="s" onPress={() => save($)}>Save</Button>
-          <Button key="default" onPress={() => edit($, p => ({ ...p, draft: DEFAULT, status: '' }))}>
-            Back to default
-          </Button>
-          <Button key="close" role="dismiss" onPress={() => $.ui.close({ id: PANE_ID })}>Close</Button>
-        </Box>
+        {section('In full', 'sent with every request', inFull, 'Make name-only')}
+        {section('Name-only', 'fetched when needed', nameOnly, 'Make full')}
       </Box>
     )
   })
@@ -280,7 +296,7 @@ async function save($: EngineInterface) {
   } catch (error) {
     return edit($, p => ({ ...p, status: `Not saved: ${error instanceof Error ? error.message : error}` }))
   }
-  await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, status: 'Applies from your next conversation.' }))
+  await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, status: 'Saved. It applies from your next conversation.' }))
 }
 
 // Changes what the pane shows.
