@@ -1,7 +1,7 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buttons, counts, DEFAULT, elsewhere, fullness, items, same, state, switched, toolCount } from './pane'
+import { buttons, changes, counts, DEFAULT, elsewhere, fullness, items, same, state, switched, toolCount } from './pane'
 import type { Item, Row } from './pane'
 import { CHANGE, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
@@ -41,6 +41,7 @@ export const register: Register = on => {
     const isDeferred = loadedInFull(list).has(e.tool) ? false : !named || named.includes(e.tool) || !asked
     const id = `${session}:${e.tool}`
     const placed = await update($, { plugin: 'less-bloat', key: 'deferred', id }, first => first ?? isDeferred)
+    await update($, { plugin: 'less-bloat', key: 'asked', id }, first => first ?? asked)
     // One the user made name-only themselves needs no telling.
     if (asked && placed && !list?.defer.includes(e.tool)) tell($, e.tool)
     return { ...result, isDeferred: placed }
@@ -99,8 +100,7 @@ export const register: Register = on => {
   // without ToolSearch, gets this conversation's list as text.
   on('command.run', { command: COMMAND.name }, async $ => {
     if (!(await $.session.surfaces()).length) return { text: `${await listing($)}\n\n${CHANGE}` }
-    const told = await announced($).catch(() => undefined)
-    return (await open($, await saved($), told ?? [])) ? {} : { text: await listing($) }
+    return (await open($, await saved($))) ? {} : { text: await listing($) }
   })
 
   // The settings pane /less-bloat opens: each tool (or MCP server) checked while in full, in the
@@ -113,12 +113,12 @@ export const register: Register = on => {
     if (!shown) return <Text dimColor>Run /less-bloat again.</Text>
     const layout = await layoutOf($)
     const isTerminal = e.surface === 'terminal'
-    const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
+    const isDefault = !changes(shown.draft).length
     const isSaved = same(shown.draft, shown.saved ?? DEFAULT)
     const { full, nameOnly } = counts(shown)
     const absent = elsewhere(shown)
-    const list = items(shown, layout)
-    const first = list.find(item => 'key' in item && item.key)
+    const shownItems = items(shown, layout)
+    const first = shownItems.find(item => 'key' in item)
     // A row goes to full unless all of it is, read from the list as it is when pressed.
     const toggle = (tools: string[]) => redraft($, draft => {
       const kept = loadedInFull(draft)
@@ -129,17 +129,21 @@ export const register: Register = on => {
     const draw = (item: Item) => {
       const autoFocus = item === first || undefined
       switch (item.kind) {
-        case 'heading': {
-          const title = `${item.title} · ${toolCount(item.tools)}`
+        case 'heading':
+          return (
+            <Box flexDirection="column" marginTop={1}>
+              <Text bold>{item.title} · {toolCount(item.tools)}</Text>
+              {item.about ? <Text dimColor>{item.about}</Text> : null}
+            </Box>
+          )
+        case 'group': {
           const { id } = item
           return (
             <Box flexDirection="column" marginTop={1}>
-              {item.key ? (
-                <Button key={item.key} plain autoFocus={autoFocus} onPress={() => edit($, p => ({ ...p, open: p.open.includes(id) ? p.open.filter(g => g !== id) : [...p.open, id] }))}>
-                  {`${item.isOpen ? '▾' : '▸'} ${title}`}
-                </Button>
-              ) : <Text bold>{title}</Text>}
-              {item.about ? <Text dimColor>{item.key ? '  ' : ''}{item.about}</Text> : null}
+              <Button key={item.key} plain autoFocus={autoFocus} onPress={() => edit($, p => ({ ...p, open: p.open.includes(id) ? p.open.filter(g => g !== id) : [...p.open, id] }))}>
+                {`${item.isOpen ? '▾' : '▸'} ${item.title} · ${toolCount(item.tools)}`}
+              </Button>
+              {item.about ? <Text dimColor>  {item.about}</Text> : null}
             </Box>
           )
         }
@@ -158,9 +162,11 @@ export const register: Register = on => {
         case 'changes':
           return (
             <Box flexDirection="column" marginTop={1}>
-              <Text bold>Changes from default<Text dimColor> · {toolCount(item.tools)}</Text></Text>
-              {item.tools ? null : <Text dimColor>  None{absent ? ' in this conversation' : ''}. Open a group to check or uncheck a tool.</Text>}
-              {absent ? <Text dimColor>  Custom mode also changes {toolCount(absent)} that this conversation doesn't have.</Text> : null}
+              <Text bold>Changes from default{item.tools ? <Text dimColor> · {toolCount(item.tools)}</Text> : null}</Text>
+              <Box flexDirection="column" paddingLeft={2}>
+                {item.tools ? null : <Text dimColor>None{absent ? ' here' : ''}. Open a group to check or uncheck a tool.</Text>}
+                {absent ? <Text dimColor>Custom mode also changes {toolCount(absent)} not listed here.</Text> : null}
+              </Box>
             </Box>
           )
         case 'change':
@@ -184,7 +190,7 @@ export const register: Register = on => {
         <Box flexDirection="row" flexWrap="wrap" gap={1}>
           <Button key="save" variant="primary" hotkey="s" onPress={() => save($)}>Save</Button>
           <Button key="default" hotkey="d" onPress={() => redraft($, () => DEFAULT)}>Back to default</Button>
-          <Button key="layout" hotkey="v" onPress={async () => $.state.set(LAYOUT, (await layoutOf($)) === 'checklist' ? 'summary' : 'checklist')}>
+          <Button key="layout" hotkey="v" onPress={() => switchLayout($)}>
             {layout === 'checklist' ? 'Try summary layout' : 'Try checklist layout'}
           </Button>
         </Box>
@@ -198,14 +204,14 @@ export const register: Register = on => {
             </Text>
           ) : (
             <Box flexDirection="column">
-              <Text><Text bold>{toolCount(full)} in full:</Text> their descriptions are in every system prompt.</Text>
+              <Text><Text bold>{toolCount(full)} in full:</Text> described in every system prompt.</Text>
               <Text><Text bold>{toolCount(nameOnly)} name-only:</Text> Claude fetches the description when it needs the tool.</Text>
             </Box>
           )}
-          {absent && layout === 'checklist' ? <Text dimColor>Custom mode also changes {toolCount(absent)} that this conversation doesn't have.</Text> : null}
+          {absent && layout === 'checklist' ? <Text dimColor>Custom mode also changes {toolCount(absent)} not listed here.</Text> : null}
           <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
         </Box>
-        {list.map(draw)}
+        {shownItems.map(draw)}
       </Box>
     )
   })
@@ -232,6 +238,8 @@ export const register: Register = on => {
     // Undo, Back to default and the other layout can take away the buttons below the keyboard,
     // which the engine then keeps on the last one, without raising ui.focus.
     const at = Math.min(ring ?? -1, keys.length - 1)
+    // On none of the pane's buttons, the engine moves the keyboard as it does.
+    if (at < 0) return next(e)
     const key = keys[Math.min(Math.max(at + e.by, 0), keys.length - 1)]!
     // Past the first or last button, the engine scrolls to what is above or below it.
     if (key === keys[at]) return next(e)
@@ -249,8 +257,8 @@ export const register: Register = on => {
     }
     const list = input.mode === 'default' ? DEFAULT : { keep: input.keep ?? [], defer: input.defer ?? [] }
     if (!isList(list)) return { result: 'Not saved: keep and defer must be lists of tool names.' }
-    // An empty custom list is default mode, as the pane saves it.
-    if (!list.keep.length && !list.defer.length) {
+    // A custom list that changes nothing is default mode, as the pane saves it.
+    if (!changes(list).length) {
       await $.store.delete('list')
       return { result: 'Saved default mode. It applies from the next conversation.' }
     }
@@ -264,8 +272,7 @@ export const register: Register = on => {
 async function listing($: EngineInterface): Promise<string> {
   const tools = (await $.tool.list()).map(t => t.name)
   const placed = tools.includes('ToolSearch') ? await placements($, tools) : null
-  const told = await announced($).catch(() => undefined)
-  return report(tools, placed, await saved($), [...await $.session.surfaces()], told ?? [])
+  return report(tools, placed, await saved($), [...await $.session.surfaces()], await askers($, tools))
 }
 
 // Counting the context, as /context does, describes part of the tools connected now, so the engine
@@ -280,6 +287,13 @@ async function placements($: EngineInterface, tools: string[]): Promise<Record<s
   const placed = await Promise.all(tools.map(async tool =>
     [tool, await read($, { plugin: 'less-bloat', key: 'deferred', id: `${session}:${tool}` })] as const))
   return Object.fromEntries(placed.filter((entry): entry is readonly [string, boolean] => entry[1] !== undefined))
+}
+
+// The tools that asked this conversation for their full description, which Claude Code would give them.
+async function askers($: EngineInterface, tools: string[]): Promise<string[]> {
+  const session = await $.session.id()
+  const asked = await Promise.all(tools.map(tool => read($, { plugin: 'less-bloat', key: 'asked', id: `${session}:${tool}` })))
+  return tools.filter((_, i) => asked[i])
 }
 
 // Tools that asked for their full description and got their name only, told a moment after the
@@ -349,29 +363,35 @@ async function layoutOf($: EngineInterface): Promise<Layout> {
   return (await $.state.get(LAYOUT)).value ?? 'checklist'
 }
 
+// The other layout, with the keyboard on this button, as the one it was on may be gone.
+async function switchLayout($: EngineInterface) {
+  await $.state.set(LAYOUT, (await layoutOf($)) === 'checklist' ? 'summary' : 'checklist')
+  await $.ui.focus({ requestId: PANE_ID, key: 'layout' })
+}
+
 // Opens the pane on this conversation's tools and the saved list. Says whether it is drawn: not
 // without ToolSearch, as then every tool is in full whatever the list.
-async function open($: EngineInterface, list: List | undefined, asked: string[]): Promise<boolean> {
+async function open($: EngineInterface, list: List | undefined): Promise<boolean> {
   const all = (await $.tool.list()).map(t => t.name)
   if (!all.includes('ToolSearch')) return false
   // Not the required tools, nor the setup tool: the pane does what it does.
   const tools = all.filter(n => !REQUIRED.includes(n) && n !== 'mcp__less-bloat__setup')
-  await $.state.set(PANE, { tools, asked, saved: list ?? null, draft: list ?? DEFAULT, status: '', open: [] })
+  await $.state.set(PANE, { tools, asked: await askers($, tools), saved: list ?? null, draft: list ?? DEFAULT, status: '', open: [] })
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 
-// Saves the pane's list; an empty one is default mode, saved as no list.
+// Saves the pane's list; one that changes nothing is default mode, saved as no list.
 async function save($: EngineInterface) {
   const { value: shown } = await $.state.get(PANE)
   if (!shown) return
-  const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
+  const isDefault = !changes(shown.draft).length
   try {
     if (isDefault) await $.store.delete('list')
     else await $.store.set('list', shown.draft)
   } catch (error) {
     return edit($, p => ({ ...p, status: `Not saved: ${error instanceof Error ? error.message : error}` }))
   }
-  await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, status: 'Saved. It applies from your next conversation.' }))
+  await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, draft: isDefault ? DEFAULT : shown.draft, status: 'Saved. It applies from your next conversation.' }))
 }
 
 // Changes the pane's list. Rows stay where they are; only the changes list below them changes.

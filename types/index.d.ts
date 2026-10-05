@@ -1,4 +1,4 @@
-// less-bloat's values in $.state, which a reload of the mod keeps. deferred and named are kept per
+// less-bloat's values in $.state, which a reload of the mod keeps. deferred, asked and named are kept per
 // conversation, by its session id, which /clear and a resume change.
 
 // The tools deferred as a conversation's first prompt went out; null or unset before it.
@@ -8,9 +8,9 @@ export type Named = string[] | null
 // ones to make name-only.
 export type SavedList = { keep: string[]; defer: string[] }
 
-// What the settings pane draws: the conversation's tools, the tools the notice has told about, the
-// saved list (null in default mode), the list as edited, a line after saving, and the groups opened
-// in the summary layout.
+// What the settings pane draws: the conversation's tools, the ones that asked for their full
+// description, the saved list (null in default mode), the list as edited, a line after saving, and
+// the groups opened in the summary layout.
 export type Pane = { tools: string[]; asked: string[]; saved: SavedList | null; draft: SavedList; status: string; open: string[] } | null
 
 // Which of the two layouts the pane draws, while the person picks one.
@@ -22,6 +22,8 @@ declare module 'claude-code' {
       // Whether a tool waits behind ToolSearch, as first described; one value per
       // `<session id>:<tool>`, so the tools described at once don't contend for one value.
       deferred: StateFamily<boolean>
+      // Whether a tool asked for its full description, as first described: Claude Code would give it.
+      asked: StateFamily<boolean>
       // One value per session id.
       named: StateFamily<Named>
       pane: Pane

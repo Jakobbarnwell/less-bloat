@@ -1,6 +1,6 @@
 {
   "name": "less-bloat",
-  "version": "0.3.3",
+  "version": "0.3.5",
   "description": "Kills the bloat in Claude Code's system prompt: rarely needed tools wait behind ToolSearch",
   "author": {
     "name": "jakobbarnwell",

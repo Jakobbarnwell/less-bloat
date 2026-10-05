@@ -21,9 +21,9 @@ export const RECOMMENDED: Record<string, string> = {
   mcp__visualize__read_me: 'recommended: show_widget needs it first',
   mcp__visualize__show_widget: 'recommended: draws charts and diagrams inline',
   // A project thread's turn must end with one of these, or the engine sends it back.
-  mcp__hearthbot__reply: "strongly recommended: a project thread's turn must end with this or the other two",
-  mcp__hearthbot__update_status: "strongly recommended: a project thread's turn must end with this or the other two",
-  mcp__hearthbot__no_reply_needed: "strongly recommended: a project thread's turn must end with this or the other two",
+  mcp__hearthbot__reply: "strongly recommended: a project thread's turn must end with reply, update_status or no_reply_needed",
+  mcp__hearthbot__update_status: "strongly recommended: a project thread's turn must end with reply, update_status or no_reply_needed",
+  mcp__hearthbot__no_reply_needed: "strongly recommended: a project thread's turn must end with reply, update_status or no_reply_needed",
 }
 
 // Custom mode's list, as /less-bloat saves it. None saved means default mode.

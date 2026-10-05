@@ -1,4 +1,4 @@
-import { loadedInFull, RECOMMENDED, REQUIRED } from './tools'
+import { loadedInFull, RECOMMENDED } from './tools'
 import type { List } from './tools'
 import type { Layout, Pane } from '../types'
 
@@ -19,10 +19,11 @@ export type Row = {
   changed: number
 }
 
-// What the pane draws below its header, in order: a group's heading (a button that opens and closes
-// it in the summary layout), a row, and in the summary layout the changes from default mode.
+// What the pane draws below its header, in order: a group's heading (in the summary layout a button
+// that opens and closes the group), a row, and in the summary layout the changes from default mode.
 export type Item =
-  | { kind: 'heading'; key?: string; id: string; title: string; about: string; tools: number; isOpen?: boolean }
+  | { kind: 'heading'; title: string; about: string; tools: number }
+  | { kind: 'group'; key: string; id: string; title: string; about: string; tools: number; isOpen: boolean }
   | { kind: 'row'; key: string; row: Row }
   | { kind: 'changes'; tools: number }
   | { kind: 'change'; key: string; row: Row }
@@ -39,7 +40,7 @@ export function items(shown: Shown, layout: Layout): Item[] {
   const count = (list: Row[]) => list.reduce((sum, r) => sum + r.tools.length, 0)
   if (layout === 'checklist') {
     return grouped.flatMap(g => [
-      { kind: 'heading' as const, id: g.id, title: g.title, about: g.about, tools: count(g.rows) },
+      { kind: 'heading' as const, title: g.title, about: g.about, tools: count(g.rows) },
       ...g.rows.map(row => ({ kind: 'row' as const, key: row.key, row })),
     ])
   }
@@ -48,7 +49,7 @@ export function items(shown: Shown, layout: Layout): Item[] {
     ...grouped.flatMap(g => {
       const isOpen = shown.open.includes(g.id)
       return [
-        { kind: 'heading' as const, key: `group:${g.id}`, id: g.id, title: g.title, about: g.about, tools: count(g.rows), isOpen },
+        { kind: 'group' as const, key: `group:${g.id}`, id: g.id, title: g.title, about: g.about, tools: count(g.rows), isOpen },
         ...(isOpen ? g.rows.map(row => ({ kind: 'row' as const, key: row.key, row })) : []),
       ]
     }),
@@ -70,21 +71,24 @@ export function counts(shown: Shown): { full: number; nameOnly: number } {
 }
 
 // Whether all of a row's tools are in full, some or none.
-export function fullness(row: Row): 'all' | 'some' | 'none' {
+export function fullness(row: Pick<Row, 'tools' | 'inFull'>): 'all' | 'some' | 'none' {
   return row.inFull === row.tools.length ? 'all' : row.inFull ? 'some' : 'none'
 }
 
-// How many tools the list changes that this conversation doesn't have, such as another app's or
-// MCP server's. A required tool, or one already as default mode has it, changes nothing.
+// The tools a list puts otherwise than default mode does. A list that changes none is default mode.
+export function changes(list: List): string[] {
+  const full = loadedInFull(list)
+  const byDefault = loadedInFull(undefined)
+  return [...new Set([...list.keep, ...list.defer])].filter(t => full.has(t) !== byDefault.has(t))
+}
+
+// How many tools the list changes that the pane doesn't list, such as another app's or MCP server's.
 export function elsewhere(shown: Shown): number {
-  const { keep, defer } = shown.draft
-  // A tool on both lists is name-only, so keeping it changes nothing.
-  const changes = new Set([...keep.filter(t => !RECOMMENDED[t] && !defer.includes(t)), ...defer.filter(t => RECOMMENDED[t])])
-  return [...changes].filter(t => !shown.tools.includes(t) && !REQUIRED.includes(t) && t !== 'mcp__less-bloat__setup').length
+  return changes(shown.draft).filter(t => !shown.tools.includes(t)).length
 }
 
 // A row's state as a word or two: in full, name-only, or how many of a server's tools are in full.
-export function state(row: Row): string {
+export function state(row: Pick<Row, 'tools' | 'inFull'>): string {
   return { all: 'in full', some: `${row.inFull} of ${row.tools.length} in full`, none: 'name-only' }[fullness(row)]
 }
 
@@ -98,8 +102,8 @@ function model(shown: Shown): Row[] {
   const byDefault = loadedInFull(undefined)
   return entries(shown.tools).map(row => {
     const inFull = row.tools.filter(t => full.has(t)).length
-    const some = inFull > 0 && inFull < row.tools.length
-    const size = !row.isServer ? '' : some ? `${inFull} of ${row.tools.length} in full` : toolCount(row.tools.length)
+    const counted = { tools: row.tools, inFull }
+    const size = !row.isServer ? '' : fullness(counted) === 'some' ? state(counted) : toolCount(row.tools.length)
     return {
       key: `row:${row.tools[0]}`,
       label: row.label,
@@ -113,8 +117,8 @@ function model(shown: Shown): Row[] {
   })
 }
 
-// Which group a row is in: kept in full by default, made name-only by less-bloat (a tool the notice
-// told about, which Claude Code would put in full), or name-only as Claude Code puts it.
+// Which group a row is in: kept in full by default, made name-only by less-bloat (a tool that asked
+// for its full description, which Claude Code would give it), or name-only as Claude Code puts it.
 function group(shown: Shown, row: Row): (typeof GROUPS)[number]['id'] {
   return row.wasFull ? 'kept' : row.tools.some(t => shown.asked.includes(t)) ? 'made' : 'design'
 }

@@ -46,7 +46,8 @@ export function warnings(tools: string[], { keep, defer }: List): string[] {
 // This conversation's tools as they are placed, with the reason for each one in full. The list is
 // the saved one, which a save in this conversation changes for the next. Without ToolSearch (placed
 // is null) the engine puts every tool in full, whatever the mod says. A tool not in placed connected
-// since the last request and is placed with the next. Asked are the tools the toast told about.
+// since the last request and is placed with the next. Asked are the tools that asked for their
+// full description.
 export function report(tools: string[], placed: Record<string, boolean> | null, list: List | undefined, surfaces: string[], asked: string[]): string {
   const pending = placed ? tools.filter(n => !(n in placed)) : []
   const full = new Set(tools.filter(n => placed ? placed[n] === false : true))
