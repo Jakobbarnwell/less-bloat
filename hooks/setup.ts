@@ -149,24 +149,25 @@ export function same(a: List, b: List): boolean {
   return key(a) === key(b)
 }
 
-type Row = { label: string; note: string; tools: string[] }
+type Row = { label: string; note: string; tools: string[]; isServer: boolean }
 
 // The recommended tools one per row, with why; the others, built-in one per row and MCP ones one
-// row per server.
+// row per server. A note says why a tool is in full, or that it asked to be.
 export function rows(tools: string[], asked: string[]): Row[] {
   const recommended = Object.keys(RECOMMENDED).filter(n => tools.includes(n))
-    .map(n => ({ label: label(n), note: RECOMMENDED[n]!, tools: [n] }))
+    .map(n => ({ label: label(n), note: RECOMMENDED[n]!, tools: [n], isServer: false }))
   const servers = new Map<string, string[]>()
   const own: Row[] = []
   for (const n of tools.filter(n => !RECOMMENDED[n]).sort()) {
     const server = n.match(/^mcp__(.+?)__/)?.[1]
     if (server) servers.set(server, [...(servers.get(server) ?? []), n])
-    else own.push({ label: n, note: asked.includes(n) ? 'asked to be in full' : '', tools: [n] })
+    else own.push({ label: n, note: asked.includes(n) ? 'asked to be in full' : '', tools: [n], isServer: false })
   }
   const grouped = [...servers].map(([server, names]) => ({
     label: /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(server) ? `connector ${server.slice(0, 8)}` : server,
-    note: `${names.length} ${names.length === 1 ? 'tool' : 'tools'}${names.some(n => asked.includes(n)) ? ', asked to be in full' : ''}`,
+    note: names.some(n => asked.includes(n)) ? 'asked to be in full' : '',
     tools: names,
+    isServer: true,
   }))
   return [...recommended, ...own, ...grouped]
 }

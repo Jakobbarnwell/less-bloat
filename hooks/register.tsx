@@ -116,21 +116,24 @@ export const register: Register = on => {
       const kept = loadedInFull(p.draft)
       return { ...p, draft: switched(p.draft, tools, !tools.every(n => kept.has(n))), status: '' }
     })
-    // An MCP server's row is name-only while any of its tools is, and says how many are in full.
+    // An MCP server's row is name-only while any of its tools is, and counts its tools.
     const all = rows(shown.tools, shown.asked).map(row => {
       const inFull = row.tools.filter(n => full.has(n)).length
-      const some = inFull && inFull < row.tools.length ? `${inFull} in full` : ''
-      return { ...row, inFull, note: [some, row.note].filter(Boolean).join(', ') }
+      const n = row.tools.length
+      const count = !row.isServer ? '' : inFull && inFull < n ? `${inFull} of ${n} in full` : `${n} ${n === 1 ? 'tool' : 'tools'}`
+      return { ...row, isFull: inFull === n, note: [count, row.note].filter(Boolean).join(', ') }
     })
-    const inFull = all.filter(row => row.inFull === row.tools.length)
-    // The ones that asked to be in full first, as they are the ones less-bloat changed.
-    const asked = (row: (typeof all)[number]) => (row.tools.some(n => shown.asked.includes(n)) ? 0 : 1)
-    const nameOnly = all.filter(row => row.inFull < row.tools.length).sort((a, b) => asked(a) - asked(b))
+    const fullRows = all.filter(row => row.isFull)
+    // The ones that asked to be in full and are not first, as they are the ones less-bloat changed.
+    const asking = (row: (typeof all)[number]) => (row.tools.some(n => shown.asked.includes(n) && !full.has(n)) ? 0 : 1)
+    const nameOnlyRows = all.filter(row => !row.isFull).sort((a, b) => asking(a) - asking(b))
+    const first = [...fullRows, ...nameOnlyRows][0]
     const section = (title: string, about: string, list: typeof all, action: string) => (
       <Box flexDirection="column">
         <Text bold>
           {title} <Text dimColor>· {about} · {list.length}</Text>
         </Text>
+        {/* A moved row leaves its list; the keyboard's ring stays in place, on the row after it. */}
         {list.map(row => (
           <Box flexDirection="row" justifyContent="space-between" gap={2}>
             <Box flexShrink={1}>
@@ -139,7 +142,7 @@ export const register: Register = on => {
                 {row.note ? <Text dimColor>  {row.note}</Text> : null}
               </Text>
             </Box>
-            <Button key={`row:${row.label}`} autoFocus={row === all[0] || undefined} onPress={() => toggle(row.tools)}>
+            <Button key={`row:${row.label}`} autoFocus={row === first || undefined} onPress={() => toggle(row.tools)}>
               {action}
             </Button>
           </Box>
@@ -159,14 +162,18 @@ export const register: Register = on => {
             <Button key="default" onPress={() => edit($, p => ({ ...p, draft: DEFAULT, status: '' }))}>
               Back to default
             </Button>
+            {/* The terminal draws its own close mark; a desktop draws this as its native one. */}
+            {e.surface === 'terminal' ? null : (
+              <Button key="close" role="dismiss" onPress={() => $.ui.close({ id: PANE_ID })}>Close</Button>
+            )}
           </Box>
         </Box>
         <Text dimColor>
           {shown.status ||
             'Tools in full go out with every request; name-only ones are fetched when Claude needs them. A saved change applies from your next conversation.'}
         </Text>
-        {section('In full', 'sent with every request', inFull, 'Make name-only')}
-        {section('Name-only', 'fetched when needed', nameOnly, 'Make full')}
+        {section('In full', 'sent with every request', fullRows, 'Make name-only')}
+        {section('Name-only', 'fetched when needed', nameOnlyRows, 'Make full')}
       </Box>
     )
   })
