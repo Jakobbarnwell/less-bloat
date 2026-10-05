@@ -1,11 +1,13 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { CHANGE, COMMAND, DEFAULT, notice, report, rows, same, SETUP, switched, warnings } from './setup'
+import { buttons, counts, items, state } from './pane'
+import type { Item, Row } from './pane'
+import { CHANGE, COMMAND, DEFAULT, notice, report, same, SETUP, switched, warnings } from './setup'
 import type { Input } from './setup'
 import { isList, isNames, loadedInFull, REQUIRED } from './tools'
 import type { List } from './tools'
-import type { Pane, SavedList } from '../types'
+import type { Layout, Pane, SavedList } from '../types'
 
 // Each conversation's state is kept by its session id, which /clear and a resume change, and a
 // reload of the mod keeps: the tools deferred as its first prompt went out, and each tool's
@@ -101,92 +103,130 @@ export const register: Register = on => {
     return (await open($, await saved($), told ?? [])) ? {} : { text: await listing($) }
   })
 
-  // The settings pane /less-bloat opens: the tools in two lists, in full and name-only, each tool
-  // (or MCP server) with a button that moves it to the other, saved as custom mode's list. It draws
-  // from what open() took in, so drawing reads nothing else.
+  // The settings pane /less-bloat opens: each tool (or MCP server) checked while in full, in the
+  // group default mode puts it in, saved as custom mode's list. It draws from what open() took in,
+  // so drawing reads nothing else. Two layouts while the person picks one: every row (checklist), or
+  // the counts, groups that open, and the changes from default mode (summary).
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const { value: shown } = await $.state.get(PANE)
     if (!shown) return <Text dimColor>Run /less-bloat again.</Text>
+    const layout = (await $.state.get(LAYOUT)).value ?? 'checklist'
+    const isTerminal = e.surface === 'terminal'
     const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
     const isSaved = same(shown.draft, shown.saved ?? DEFAULT)
+    const { full, nameOnly } = counts(shown)
+    const list = items(shown, layout)
+    const first = list.find(item => 'key' in item && item.key)
     // A row goes to full unless all of it is, read from the list as it is when pressed.
     const toggle = (tools: string[]) => redraft($, draft => {
       const kept = loadedInFull(draft)
       return switched(draft, tools, !tools.every(n => kept.has(n)))
     })
-    const { all, fullRows, nameOnlyRows } = lists(shown)
-    const first = [...fullRows, ...nameOnlyRows][0]
-    const section = (title: string, about: string, list: typeof all, action: string) => (
-      <Box flexDirection="column">
-        <Text bold>
-          {title} <Text dimColor>· {about} · {list.length}</Text>
-        </Text>
-        {list.map(row => (
-          <Box flexDirection="row" justifyContent="space-between" gap={2}>
-            <Box flexShrink={1}>
-              <Text>
-                {row.label}
-                {row.note ? <Text dimColor>  {row.note}</Text> : null}
-              </Text>
+    const glyphs = isTerminal ? ['[ ]', '[-]', '[x]'] : ['☐', '◩', '☑']
+    const mark = (row: Row) => glyphs[row.inFull === row.tools.length ? 2 : row.inFull ? 1 : 0]
+    const draw = (item: Item) => {
+      const autoFocus = item === first || undefined
+      switch (item.kind) {
+        case 'heading': {
+          const title = `${item.title} · ${item.tools} ${item.tools === 1 ? 'tool' : 'tools'}`
+          const id = item.key?.slice('group:'.length)
+          return (
+            <Box flexDirection="column" marginTop={1}>
+              {item.key && id ? (
+                <Button key={item.key} plain autoFocus={autoFocus} onPress={() => edit($, p => ({ ...p, open: item.isOpen ? p.open.filter(g => g !== id) : [...p.open, id] }))}>
+                  {`${item.isOpen ? '▾' : '▸'} ${title}`}
+                </Button>
+              ) : <Text bold>{title}</Text>}
+              {item.about ? <Text dimColor>{item.key ? '  ' : ''}{item.about}</Text> : null}
             </Box>
-            <Button key={`row:${row.label}`} autoFocus={row === first || undefined} onPress={() => toggle(row.tools)}>
-              {action}
-            </Button>
-          </Box>
-        ))}
-      </Box>
-    )
+          )
+        }
+        case 'row': {
+          const note = [item.row.note, item.row.isChanged ? 'changed' : ''].filter(Boolean).join(' · ')
+          // The note goes under the name where the two don't fit on one line.
+          return (
+            <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
+              <Button key={item.key} plain autoFocus={autoFocus} onPress={() => toggle(item.row.tools)}>
+                {`${mark(item.row)} ${item.row.label}`}
+              </Button>
+              {note ? <Text dimColor>{note}</Text> : null}
+            </Box>
+          )
+        }
+        case 'changes':
+          return (
+            <Box flexDirection="column" marginTop={1}>
+              <Text bold>Changes from default<Text dimColor> · {item.count}</Text></Text>
+              {item.count ? null : <Text dimColor>  None. Open a group to check or uncheck a tool.</Text>}
+            </Box>
+          )
+        case 'change':
+          return (
+            <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
+              <Text>{item.row.label}<Text dimColor> {item.row.wasFull ? 'in full' : 'name-only'} → {state(item.row)}</Text></Text>
+              <Button key={item.key} onPress={() => redraft($, draft => switched(draft, item.row.tools, item.row.wasFull))}>Undo</Button>
+            </Box>
+          )
+      }
+    }
     return (
-      <Box flexDirection="column" gap={1}>
+      <Box flexDirection="column">
         {/* Clear of the close mark the terminal draws in the pane's top corner. */}
-        <Box flexDirection="row" justifyContent="space-between" gap={2} paddingRight={e.surface === 'terminal' ? 2 : 0}>
+        <Box paddingRight={isTerminal ? 2 : 0}>
           <Text bold>
             {isDefault ? 'Default mode' : 'Custom mode'}
             <Text dimColor>{isSaved ? ' · saved' : ' · not saved'}</Text>
           </Text>
-          <Box flexDirection="row" gap={1}>
-            <Button key="save" variant="primary" hotkey="s" onPress={() => save($)}>Save</Button>
-            <Button key="default" hotkey="d" onPress={() => redraft($, () => DEFAULT)}>
-              Back to default
-            </Button>
-            {/* The terminal draws its own close mark; a desktop draws this as its native one. */}
-            {e.surface === 'terminal' ? null : (
-              <Button key="close" role="dismiss" onPress={() => $.ui.close({ id: PANE_ID })}>Close</Button>
-            )}
-          </Box>
+        </Box>
+        <Box flexDirection="row" flexWrap="wrap" gap={1}>
+          <Button key="save" variant="primary" hotkey="s" onPress={() => save($)}>Save</Button>
+          <Button key="default" hotkey="d" onPress={() => redraft($, () => DEFAULT)}>Back to default</Button>
+          <Button key="layout" hotkey="v" onPress={() => $.state.set(LAYOUT, layout === 'checklist' ? 'summary' : 'checklist')}>
+            {layout === 'checklist' ? 'Try summary layout' : 'Try checklist layout'}
+          </Button>
         </Box>
         {/* The terminal's keys, as Claude Code's own menus list theirs; a desktop is clicked. */}
-        {e.surface === 'terminal' ? <Text dimColor>↑/↓ to move · Enter to select · s to save · d for default · Esc to close</Text> : null}
-        <Text dimColor>
-          {shown.status ||
-            "A tool in full has its full description in every system prompt. A name-only tool is listed by name, and Claude fetches its description when it needs the tool. A saved change applies from your next conversation."}
-        </Text>
-        {section('In full', 'in every system prompt', fullRows, 'Make name-only')}
-        {section('Name-only', 'description fetched when needed', nameOnlyRows, 'Make full')}
+        {isTerminal ? <Text dimColor>↑/↓ to move · Enter to select · s to save · d for default · v for the other layout · Esc to close</Text> : null}
+        <Box flexDirection="column" marginTop={1}>
+          {layout === 'checklist' ? (
+            <Text>
+              {full} in full, {nameOnly} name-only.
+              <Text dimColor> Checked tools are in full: their description is in every system prompt. Unchecked tools are name-only: Claude fetches the description when it needs the tool.</Text>
+            </Text>
+          ) : (
+            <Box flexDirection="column">
+              <Text><Text bold>{full} tools in full:</Text> their description is in every system prompt.</Text>
+              <Text><Text bold>{nameOnly} tools name-only:</Text> Claude fetches the description when it needs the tool.</Text>
+            </Box>
+          )}
+          <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
+        </Box>
+        {list.map(draw)}
       </Box>
     )
   })
 
-  // Where the keyboard's ring is in the pane, for the arrows. Kept apart from the pane's state, so
-  // a move doesn't redraw it.
+  // Where the keyboard is in the pane, for the arrows. Kept apart from the pane's state, so a move
+  // doesn't redraw it.
   on('ui.focus', { component: 'Pane', requestId: PANE_ID }, async ($, e, next) => {
     const result = await next(e)
-    if (!result.deny) await $.state.set(RING, e.element ?? '')
+    const { value: shown } = await $.state.get(PANE)
+    if (!result.deny && shown) await $.state.set(RING, buttons(shown, await layoutOf($)).indexOf(e.element ?? ''))
     return result
   })
 
-  // In the terminal, up and down move the ring a button at a time, as in Claude Code's own menus,
-  // where the engine would scroll the pane a row (or more, summed while this hook ran); the ring's
-  // move scrolls it into view. The wheel and the page keys scroll, and a desktop scrolls as it does.
+  // In the terminal, up and down move the keyboard a button at a time, as in Claude Code's own menus,
+  // where the engine would scroll the pane a row (or more, summed while this hook ran); the move
+  // scrolls it into view. The wheel and the page keys scroll, and a desktop scrolls as it does.
   // The event doesn't say which surface sent it, so a session with none but the terminal's is one.
   on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, async ($, e, next) => {
     const { value: shown } = await $.state.get(PANE)
     if (!shown || e.origin.kind !== 'person' || e.pointer || Math.abs(e.by) >= e.bodyRows) return next(e)
     if ((await $.session.surfaces()).some(surface => surface !== 'terminal')) return next(e)
     const { value: ring } = await $.state.get(RING)
-    const keys = buttons(shown)
-    const key = keys[Math.min(Math.max(keys.indexOf(ring ?? '') + e.by, 0), keys.length - 1)]!
+    const keys = buttons(shown, await layoutOf($))
+    const key = keys[Math.min(Math.max((ring ?? -1) + e.by, 0), keys.length - 1)]!
     if ((await $.ui.focus({ requestId: PANE_ID, key })).deny) return next(e)
     await $.ui.scroll({ to: { key }, in: PANE_ID })
     return {}
@@ -291,10 +331,15 @@ async function saved($: EngineInterface): Promise<List | undefined> {
   return isList(list) ? list : undefined
 }
 
-// The settings pane's id, what it draws, and the key of the button the keyboard is on.
+// The settings pane's id, what it draws, where the keyboard is in it, and its layout.
 const PANE_ID = 'less-bloat'
 const PANE = { plugin: 'less-bloat', key: 'pane' } as const
 const RING = { plugin: 'less-bloat', key: 'ring' } as const
+const LAYOUT = { plugin: 'less-bloat', key: 'layout' } as const
+
+async function layoutOf($: EngineInterface): Promise<Layout> {
+  return (await $.state.get(LAYOUT)).value ?? 'checklist'
+}
 
 // Opens the pane on this conversation's tools and the saved list. Says whether it is drawn: not
 // without ToolSearch, as then every tool is in full whatever the list.
@@ -303,7 +348,7 @@ async function open($: EngineInterface, list: List | undefined, asked: string[])
   if (!all.includes('ToolSearch')) return false
   // Not the required tools, nor the setup tool: the pane does what it does.
   const tools = all.filter(n => !REQUIRED.includes(n) && n !== 'mcp__less-bloat__setup')
-  await $.state.set(PANE, { tools, asked, saved: list ?? null, draft: list ?? DEFAULT, status: '' })
+  await $.state.set(PANE, { tools, asked, saved: list ?? null, draft: list ?? DEFAULT, status: '', open: [] })
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 
@@ -321,48 +366,9 @@ async function save($: EngineInterface) {
   await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, status: 'Saved. It applies from your next conversation.' }))
 }
 
-// The pane's rows as drawn: in full, then name-only. An MCP server's row is name-only while any of
-// its tools is, and counts its tools.
-function lists(shown: NonNullable<Pane>) {
-  const full = loadedInFull(shown.draft)
-  const all = rows(shown.tools).map(row => {
-    const inFull = row.tools.filter(n => full.has(n)).length
-    const n = row.tools.length
-    const isFull = inFull === n
-    // A name-only row less-bloat made so, which Claude Code would put in full; else Claude Code's own.
-    const isChanged = row.tools.some(n => shown.asked.includes(n) && !full.has(n))
-    const why = row.note || (isFull ? '' : isChanged ? 'name-only by less-bloat' : 'name-only by design')
-    const count = !row.isServer ? '' : inFull && inFull < n ? `${inFull} of ${n} in full` : `${n} ${n === 1 ? 'tool' : 'tools'}`
-    return { ...row, isFull, isChanged, note: [count, why].filter(Boolean).join(', ') }
-  })
-  // The ones less-bloat made name-only first.
-  return {
-    all,
-    fullRows: all.filter(row => row.isFull),
-    nameOnlyRows: all.filter(row => !row.isFull).sort((a, b) => Number(b.isChanged) - Number(a.isChanged)),
-  }
-}
-
-// The keys of the pane's buttons in the keyboard's order, as drawn on the terminal.
-function buttons(shown: NonNullable<Pane>) {
-  const { fullRows, nameOnlyRows } = lists(shown)
-  return ['save', 'default', ...[...fullRows, ...nameOnlyRows].map(row => `row:${row.label}`)]
-}
-
-// Changes the pane's list. Rows move between the lists, and the engine keeps the keyboard's ring at
-// the same position, now on another button, without raising ui.focus, so this records which.
-async function redraft($: EngineInterface, change: (draft: SavedList) => SavedList) {
-  // update() may run the change again on a clash, so the last run's pane is the one written.
-  let shown: Pane = null
-  let moved: Pane = null
-  await update($, PANE, p => {
-    shown = p ?? null
-    moved = shown && { ...shown, draft: change(shown.draft), status: '' }
-    return moved
-  })
-  const { value: ring } = await $.state.get(RING)
-  const at = shown && moved ? buttons(shown).indexOf(ring ?? '') : -1
-  if (at >= 0) await $.state.set(RING, buttons(moved!)[at]!)
+// Changes the pane's list. No row moves, so the keyboard stays on its button.
+function redraft($: EngineInterface, change: (draft: SavedList) => SavedList) {
+  return edit($, p => ({ ...p, draft: change(p.draft), status: '' }))
 }
 
 // Changes what the pane shows.
