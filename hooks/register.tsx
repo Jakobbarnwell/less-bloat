@@ -1,7 +1,7 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buttons, counts, items, state } from './pane'
+import { buttons, counts, fullness, items, state, tools } from './pane'
 import type { Item, Row } from './pane'
 import { CHANGE, COMMAND, DEFAULT, notice, report, same, SETUP, switched, warnings } from './setup'
 import type { Input } from './setup'
@@ -111,7 +111,7 @@ export const register: Register = on => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const { value: shown } = await $.state.get(PANE)
     if (!shown) return <Text dimColor>Run /less-bloat again.</Text>
-    const layout = (await $.state.get(LAYOUT)).value ?? 'checklist'
+    const layout = await layoutOf($)
     const isTerminal = e.surface === 'terminal'
     const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
     const isSaved = same(shown.draft, shown.saved ?? DEFAULT)
@@ -123,18 +123,18 @@ export const register: Register = on => {
       const kept = loadedInFull(draft)
       return switched(draft, tools, !tools.every(n => kept.has(n)))
     })
-    const glyphs = isTerminal ? ['[ ]', '[-]', '[x]'] : ['☐', '◩', '☑']
-    const mark = (row: Row) => glyphs[row.inFull === row.tools.length ? 2 : row.inFull ? 1 : 0]
+    const marks = isTerminal ? { all: '[x]', some: '[-]', none: '[ ]' } : { all: '☑', some: '◩', none: '☐' }
+    const mark = (row: Row) => marks[fullness(row)]
     const draw = (item: Item) => {
       const autoFocus = item === first || undefined
       switch (item.kind) {
         case 'heading': {
-          const title = `${item.title} · ${item.tools} ${item.tools === 1 ? 'tool' : 'tools'}`
-          const id = item.key?.slice('group:'.length)
+          const title = `${item.title} · ${tools(item.tools)}`
+          const { id } = item
           return (
             <Box flexDirection="column" marginTop={1}>
-              {item.key && id ? (
-                <Button key={item.key} plain autoFocus={autoFocus} onPress={() => edit($, p => ({ ...p, open: item.isOpen ? p.open.filter(g => g !== id) : [...p.open, id] }))}>
+              {item.key ? (
+                <Button key={item.key} plain autoFocus={autoFocus} onPress={() => edit($, p => ({ ...p, open: p.open.includes(id) ? p.open.filter(g => g !== id) : [...p.open, id] }))}>
                   {`${item.isOpen ? '▾' : '▸'} ${title}`}
                 </Button>
               ) : <Text bold>{title}</Text>}
@@ -157,8 +157,9 @@ export const register: Register = on => {
         case 'changes':
           return (
             <Box flexDirection="column" marginTop={1}>
-              <Text bold>Changes from default<Text dimColor> · {item.count}</Text></Text>
-              {item.count ? null : <Text dimColor>  None. Open a group to check or uncheck a tool.</Text>}
+              <Text bold>Changes from default<Text dimColor> · {tools(item.tools)}</Text></Text>
+              {item.tools ? null : <Text dimColor>  None here. Open a group to check or uncheck a tool.</Text>}
+              {item.elsewhere ? <Text dimColor>  Your list also changes {tools(item.elsewhere)} this conversation doesn't have.</Text> : null}
             </Box>
           )
         case 'change':
@@ -196,8 +197,8 @@ export const register: Register = on => {
             </Text>
           ) : (
             <Box flexDirection="column">
-              <Text><Text bold>{full} tools in full:</Text> their description is in every system prompt.</Text>
-              <Text><Text bold>{nameOnly} tools name-only:</Text> Claude fetches the description when it needs the tool.</Text>
+              <Text><Text bold>{tools(full)} in full:</Text> the description is in every system prompt.</Text>
+              <Text><Text bold>{tools(nameOnly)} name-only:</Text> Claude fetches the description when it needs the tool.</Text>
             </Box>
           )}
           <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
@@ -226,7 +227,10 @@ export const register: Register = on => {
     if ((await $.session.surfaces()).some(surface => surface !== 'terminal')) return next(e)
     const { value: ring } = await $.state.get(RING)
     const keys = buttons(shown, await layoutOf($))
-    const key = keys[Math.min(Math.max((ring ?? -1) + e.by, 0), keys.length - 1)]!
+    // Undo, Back to default and the other layout can take away the buttons below the keyboard,
+    // which the engine then keeps on the last one, without raising ui.focus.
+    const at = Math.min(ring ?? -1, keys.length - 1)
+    const key = keys[Math.min(Math.max(at + e.by, 0), keys.length - 1)]!
     if ((await $.ui.focus({ requestId: PANE_ID, key })).deny) return next(e)
     await $.ui.scroll({ to: { key }, in: PANE_ID })
     return {}
@@ -366,7 +370,7 @@ async function save($: EngineInterface) {
   await edit($, p => ({ ...p, saved: isDefault ? null : shown.draft, status: 'Saved. It applies from your next conversation.' }))
 }
 
-// Changes the pane's list. No row moves, so the keyboard stays on its button.
+// Changes the pane's list. Rows stay where they are; only the changes list below them changes.
 function redraft($: EngineInterface, change: (draft: SavedList) => SavedList) {
   return edit($, p => ({ ...p, draft: change(p.draft), status: '' }))
 }
