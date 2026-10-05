@@ -1,7 +1,7 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { notice, report, SETUP, warnings } from './setup'
+import { CHANGE, COMMAND, NOTE_TO_MODEL, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
 import { isList, isNames, loadedInFull } from './tools'
 import type { List } from './tools'
@@ -45,6 +45,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     await $.tool.register(SETUP)
+    await $.command.register(COMMAND)
     const result = await next(e)
     await describe($)
     return result
@@ -91,16 +92,17 @@ export const register: Register = on => {
     return result
   })
 
+  // /less-bloat shows the list at once, without the model, and leaves the model a note, so the
+  // person can say what to change.
+  on('command.run', { command: COMMAND.name }, async $ => ({ text: `${await listing($)}\n\n${CHANGE}`, context: [NOTE_TO_MODEL] }))
+
   // The setup tool, as SETUP names it. A save applies from the next conversation: a new session or
   // /clear.
   on('tool.call', { tool: 'mcp__less-bloat__setup' }, async ($, e) => {
     const input = e as Input
     const tools = (await $.tool.list()).map(t => t.name)
     if (!input.mode) {
-      const placed = tools.includes('ToolSearch') ? await placements($, tools) : null
-      const told = await announced($).catch(() => undefined)
-      const listing = report(tools, placed, await saved($), [...await $.session.surfaces()], told ?? [])
-      return { result: input.keep || input.defer ? `Not saved: pass mode to save.\n${listing}` : listing }
+      return { result: input.keep || input.defer ? `Not saved: pass mode to save.\n${await listing($)}` : await listing($) }
     }
     if (input.mode === 'default') {
       await $.store.delete('list')
@@ -111,6 +113,14 @@ export const register: Register = on => {
     await $.store.set('list', list)
     return { result: ['Saved custom mode. It applies from the next conversation.', ...warnings(tools, list)].join(' ') }
   })
+}
+
+// This conversation's tools as they are placed, as the setup tool and /less-bloat show them.
+async function listing($: EngineInterface): Promise<string> {
+  const tools = (await $.tool.list()).map(t => t.name)
+  const placed = tools.includes('ToolSearch') ? await placements($, tools) : null
+  const told = await announced($).catch(() => undefined)
+  return report(tools, placed, await saved($), [...await $.session.surfaces()], told ?? [])
 }
 
 // Counting the context, as /context does, describes part of the tools connected now, so the engine

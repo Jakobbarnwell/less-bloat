@@ -1,14 +1,20 @@
 import { loadedInFull, RECOMMENDED, REQUIRED } from './tools'
 import type { List } from './tools'
 
-// Custom mode's setup is a conversation: `/less-bloat` (commands/less-bloat.md) asks the model
-// to run it, and the model reads and saves the choices through this tool, which register.ts
-// answers. A user who asks in chat gets the same setup.
+// Custom mode's setup is a conversation: `/less-bloat` shows the list and the person says what to
+// change, or asks in chat, and the model reads and saves the choices through this tool, which
+// register.ts answers.
 const NAME = 'setup'
+
+export const COMMAND = { name: 'less-bloat', description: 'Show which tools are in full and which name-only, and change them' }
+
+// What /less-bloat shows below the list, and what it leaves the model.
+export const CHANGE = 'To change it, tell Claude, such as "keep my browser tools in full" or "go back to default mode". Changes apply from your next conversation.'
+export const NOTE_TO_MODEL = `The user ran /less-bloat, which showed them which tools are in full and which are name-only. If they ask to change that, use the mcp__less-bloat__${NAME} tool, fetching it with ToolSearch if it's name-only, and follow its description.`
 
 const DESCRIPTION = `Shows and changes which tools Claude sees with their full description in every request, and which by name only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps in full, and an MCP server's that connects after the first message and asks for its full description. Run it as a short setup with the user:
 1. Call it with no input. It lists this conversation's tools: which have their full description and why, and which are name-only.
-2. Summarize that for the user, then ask what to change with AskUserQuestion. Say which tools are strongly recommended to keep in full and why. Offer full descriptions for the name-only tools the user is likely to want used unprompted, starting with the ones that asked for theirs, grouped by server, and to make the recommended ones they don't need name-only.
+2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools are strongly recommended to keep in full and why. Offer full descriptions for the name-only tools the user is likely to want used unprompted, starting with the ones that asked for theirs, grouped by server, and to make the recommended ones they don't need name-only.
 3. Show the user what changes, old → new, then call it with mode "custom", keep (the tools to give their full description besides the recommended ones) and defer (the recommended tools to make name-only), as exact tool names, or with mode "default" to go back to the recommended list.
 Changes apply from the next conversation: a new session or /clear.`
 
@@ -61,7 +67,7 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
     ...tools.filter(n => full.has(n)).map(n => `- ${n}: ${why(n)}`),
     ...section('Name-only, though they asked for their full description:', nameOnly.filter(n => asked.includes(n))),
     ...section('Name-only:', nameOnly.filter(n => !asked.includes(n))),
-    ...(pending.length ? ['Placed with the next request:', ...pending.map(n => `- ${n}`)] : []),
+    ...section('Placed with the next request:', pending),
   ].join('\n')
 }
 
@@ -77,8 +83,8 @@ function section(heading: string, tools: string[]): string[] {
   return tools.length ? [heading, ...lines, ...[...servers].map(([server, names]) => `- ${server}*: ${names.join(', ')}`)] : []
 }
 
-// The notice for tools that asked for their full description and got their name only: a toast
-// short enough for the CLI's small box, and the whole story as a line in the transcript. The first
+// The notice for tools that asked for their full description and got their name only: a count in a
+// toast short enough for the CLI's small box, and the names as a line in the transcript. The first
 // conversation less-bloat shows one in names the tools there already were, so it doesn't call them
 // new.
 export function notice(tools: string[], first: boolean): { toast: string; line: string } {
@@ -89,21 +95,20 @@ export function notice(tools: string[], first: boolean): { toast: string; line: 
     if (server) servers.set(server, (servers.get(server) ?? 0) + 1)
     else own.push(n)
   }
-  const counted = [...servers].map(([s, n]) => `${s} (${n} ${n === 1 ? 'tool' : 'tools'})`)
+  // Biggest servers first. Some connectors' only name is an ID, such as 1a59c906-04da-….
+  const counted = [...servers].sort((a, b) => b[1] - a[1])
+    .map(([s, n]) => `${/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s) ? 'a connector' : s} (${n})`)
   const names = [
-    ...(own.length ? [`${own.length === 1 ? 'tool' : 'tools'} ${some(own)}`] : []),
+    ...(own.length ? [some(own)] : []),
     ...(servers.size ? [`MCP ${servers.size === 1 ? 'server' : 'servers'} ${some(counted)}`] : []),
   ].join(', plus ')
-  // "It" is the one tool or server named; the descriptions are one per tool.
-  const it = own.length + servers.size === 1 ? ['its', 'it'] : ['their', 'them']
-  const description = tools.length === 1 ? 'full description' : 'full descriptions'
-  const toast = `${some([...own, ...counted], 1)} ${it[1] === 'it' ? 'is' : 'are'} now name-only. /less-bloat to change.`
+  const count = `${tools.length}${first ? '' : ' new'} ${tools.length === 1 ? 'tool' : 'tools'}`
+  const toast = `${count} ${tools.length === 1 ? 'is' : 'are'} now name-only. /less-bloat to see or change.`
   const line = [
-    first ? names[0]!.toUpperCase() + names.slice(1) : `New ${names}`,
-    `wanted ${it[0]} ${description} in the system prompt, every time, regardless of whether Claude uses ${it[1]}.`,
-    `less-bloat changed ${it[1]} to name-only in the system prompt, like most of your other tools.`,
-    `Claude fetches the ${description} only when it actually wants to use the ${tools.length === 1 ? 'tool' : 'tools'}.`,
-    '/less-bloat to change this.',
+    `less-bloat made ${count} name-only: ${names}.`,
+    tools.length === 1 ? 'It asked for its' : 'They asked for their',
+    'full description in every request; Claude now fetches it only when it uses the tool.',
+    '/less-bloat to see or change.',
   ].join(' ')
   return { toast, line }
 }
