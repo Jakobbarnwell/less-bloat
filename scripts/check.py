@@ -251,10 +251,11 @@ def main():
         cleared = steps[-1]['requests'][-1:]
         del steps[-1]['requests'][-1:]
         steps.append({**steps[-1], 'name': 'save, after /clear', 'keep': custom, 'requests': cleared})
-        # Saved without the required tools, which a list can't make name-only.
-        expected = {**CUSTOM, 'defer': [t for t in CUSTOM['defer'] if t not in required]}
-        if store().get('list') != expected:
-            failures.append(f'the setup saved {store().get("list")} to the store at {stores}, not {expected}')
+        # Saved without ToolSearch, which a list can't make name-only.
+        expected = {**CUSTOM, 'defer': [t for t in CUSTOM['defer'] if t != 'ToolSearch']}
+        saved = store().get('list')
+        if saved != expected:
+            failures.append(f'the setup saved {saved or "no list"} to the store at {stores}, not {expected}')
         session = step('custom mode', custom, ['Say ok.'])
         step('custom resume', custom, ['Say ok again.'], '--resume', session)
         if 'announced' in store():

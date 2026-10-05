@@ -30,13 +30,17 @@ export type Input = { mode?: 'default' | 'custom'; keep?: string[]; defer?: stri
 // Registered when the session starts.
 export const SETUP = { name: NAME, description: DESCRIPTION, inputSchema: INPUT }
 
-// What a save warns about: a name that matches no tool here may be a typo, or a tool
-// of another app or MCP server.
-export function warnings(tools: string[], { keep, defer }: List): string[] {
-  const unknown = [...keep, ...defer].filter(n => !tools.includes(n))
-  const idle = defer.filter(n => REQUIRED.includes(n) || (!RECOMMENDED[n] && !keep.includes(n)))
+// What a save warns about, each name once: a name on both lists, one that matches no tool here (a
+// typo, or a tool of another app or MCP server), and the entries of this session's tools that
+// change nothing, which the save leaves out.
+export function warnings(tools: string[], list: List): string[] {
+  const keep = [...new Set(list.keep)]
+  const defer = [...new Set(list.defer)]
+  const unknown = [...new Set([...keep, ...defer])].filter(n => !tools.includes(n))
+  const here = (n: string) => tools.includes(n)
   const both = keep.filter(n => defer.includes(n) && !REQUIRED.includes(n))
-  const full = keep.filter(n => (REQUIRED.includes(n) || RECOMMENDED[n]) && !defer.includes(n))
+  const idle = defer.filter(n => here(n) && (REQUIRED.includes(n) || (!RECOMMENDED[n] && !keep.includes(n))))
+  const full = keep.filter(n => here(n) && (REQUIRED.includes(n) || (RECOMMENDED[n] && !defer.includes(n))))
   return [
     both.length ? `These are on both lists, so they are name-only: ${both.join(', ')}.` : '',
     unknown.length ? `No tool in this session has these names: ${unknown.join(', ')}.` : '',

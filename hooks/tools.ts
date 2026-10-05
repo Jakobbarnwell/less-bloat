@@ -47,12 +47,14 @@ export function changes(list: List): string[] {
   return [...new Set([...list.keep, ...list.defer])].filter(t => full.has(t) !== byDefault.has(t))
 }
 
-// The list without the entries that change nothing, as it is saved: a tool already placed so, or
-// kept but also on defer, which wins.
+// The list without the entries that change nothing, as it is saved: a tool already placed so, one
+// kept but also on defer, which wins, and a name repeated.
 export function effective(list: List): List {
   const changed = new Set(changes(list))
-  const keep = new Set(list.keep.filter(t => changed.has(t) && !list.defer.includes(t)))
-  return { keep: [...keep], defer: [...new Set(list.defer.filter(t => changed.has(t)))] }
+  return {
+    keep: [...new Set(list.keep)].filter(t => changed.has(t) && !list.defer.includes(t)),
+    defer: [...new Set(list.defer)].filter(t => changed.has(t)),
+  }
 }
 
 // Whether a list is empty, which is default mode's.
