@@ -58,7 +58,8 @@ def default_lists():
 # The tools default mode must keep loaded, of those a -p run has (AskUserQuestion it hasn't).
 CORE = {'Bash', 'Read', 'Edit', 'Write', 'Agent', 'Skill'}
 
-# Custom mode's list, as the setup saves it. Deferring ToolSearch must not take.
+# Custom mode's list, as the setup is asked to save it. Deferring ToolSearch must not take, and the
+# saved list leaves it out.
 CUSTOM = {'keep': ['NotebookEdit', 'mcp__probe__ping'], 'defer': ['Write', 'Skill', 'ToolSearch']}
 SAVE = (f'Call mcp__less-bloat__setup with mode "custom", keep {json.dumps(CUSTOM["keep"])} and defer '
         f'{json.dumps(CUSTOM["defer"])}, loading it with ToolSearch first if it is deferred. Then reply with its result.')
@@ -250,9 +251,10 @@ def main():
         cleared = steps[-1]['requests'][-1:]
         del steps[-1]['requests'][-1:]
         steps.append({**steps[-1], 'name': 'save, after /clear', 'keep': custom, 'requests': cleared})
-        # Saved without ToolSearch, which a list can't make name-only.
-        if store().get('list') != {**CUSTOM, 'defer': [t for t in CUSTOM['defer'] if t != 'ToolSearch']}:
-            failures.append(f'the setup saved no list to the store at {stores}')
+        # Saved without the required tools, which a list can't make name-only.
+        expected = {**CUSTOM, 'defer': [t for t in CUSTOM['defer'] if t not in required]}
+        if store().get('list') != expected:
+            failures.append(f'the setup saved {store().get("list")} to the store at {stores}, not {expected}')
         session = step('custom mode', custom, ['Say ok.'])
         step('custom resume', custom, ['Say ok again.'], '--resume', session)
         if 'announced' in store():

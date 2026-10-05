@@ -51,7 +51,13 @@ export function changes(list: List): string[] {
 // kept but also on defer, which wins.
 export function effective(list: List): List {
   const changed = new Set(changes(list))
-  return { keep: list.keep.filter(t => changed.has(t) && !list.defer.includes(t)), defer: list.defer.filter(t => changed.has(t)) }
+  const keep = new Set(list.keep.filter(t => changed.has(t) && !list.defer.includes(t)))
+  return { keep: [...keep], defer: [...new Set(list.defer.filter(t => changed.has(t)))] }
+}
+
+// Whether a list is empty, which is default mode's.
+export function isEmpty(list: List): boolean {
+  return !list.keep.length && !list.defer.length
 }
 
 // Whether two lists say the same, in any order.

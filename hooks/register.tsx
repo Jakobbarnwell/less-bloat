@@ -5,7 +5,7 @@ import { buttons, counts, elsewhere, fullness, items, state, switched, toolCount
 import type { Item, Row } from './pane'
 import { CHANGE, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
-import { DEFAULT, effective, isList, isNames, loadedInFull, REQUIRED, same } from './tools'
+import { DEFAULT, effective, isEmpty, isList, isNames, loadedInFull, REQUIRED, same } from './tools'
 import type { List } from './tools'
 import type { Layout, Pane, SavedList } from '../types'
 
@@ -116,7 +116,7 @@ export const register: Register = on => {
     if (!shown) return <Text dimColor>Run /less-bloat again.</Text>
     const layout = await layoutOf($)
     const isTerminal = e.surface === 'terminal'
-    const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
+    const isDefault = isEmpty(shown.draft)
     const isSaved = same(shown.draft, shown.saved ?? DEFAULT)
     const { full, nameOnly } = counts(shown)
     const absent = elsewhere(shown)
@@ -262,7 +262,7 @@ export const register: Register = on => {
     const tools = (await $.tool.list()).map(t => t.name)
     // Saved without the entries that change nothing, as the pane saves it; none left is default mode.
     const kept = effective(list)
-    const isDefault = !kept.keep.length && !kept.defer.length
+    const isDefault = isEmpty(kept)
     if (isDefault) await $.store.delete('list')
     else await $.store.set('list', kept)
     return { result: [`Saved ${isDefault ? 'default' : 'custom'} mode. It applies from the next conversation.`, ...warnings(tools, list)].join(' ') }
@@ -352,7 +352,7 @@ async function announced($: EngineInterface): Promise<string[] | undefined> {
 async function saved($: EngineInterface): Promise<List | undefined> {
   const list = await $.store.get('list').catch(() => undefined)
   const kept = isList(list) ? effective(list) : DEFAULT
-  return kept.keep.length || kept.defer.length ? kept : undefined
+  return isEmpty(kept) ? undefined : kept
 }
 
 // The settings pane's id, what it draws, where the keyboard is in it, and its layout.
@@ -388,7 +388,7 @@ async function open($: EngineInterface, list: List | undefined): Promise<boolean
 async function save($: EngineInterface) {
   const { value: shown } = await $.state.get(PANE)
   if (!shown) return
-  const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
+  const isDefault = isEmpty(shown.draft)
   try {
     if (isDefault) await $.store.delete('list')
     else await $.store.set('list', shown.draft)

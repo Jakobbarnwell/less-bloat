@@ -36,10 +36,12 @@ export function warnings(tools: string[], { keep, defer }: List): string[] {
   const unknown = [...keep, ...defer].filter(n => !tools.includes(n))
   const idle = defer.filter(n => REQUIRED.includes(n) || (!RECOMMENDED[n] && !keep.includes(n)))
   const both = keep.filter(n => defer.includes(n) && !REQUIRED.includes(n))
+  const full = keep.filter(n => (REQUIRED.includes(n) || RECOMMENDED[n]) && !defer.includes(n))
   return [
     both.length ? `These are on both lists, so they are name-only: ${both.join(', ')}.` : '',
     unknown.length ? `No tool in this session has these names: ${unknown.join(', ')}.` : '',
     idle.length ? `Making these name-only does nothing, as they are required or name-only already: ${idle.join(', ')}.` : '',
+    full.length ? `Keeping these in full does nothing, as they are in full already: ${full.join(', ')}.` : '',
   ].filter(Boolean)
 }
 
