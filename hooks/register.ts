@@ -100,7 +100,6 @@ export const register: Register = on => {
   // /clear.
   on('tool.call', { tool: 'mcp__less-bloat__setup' }, async ($, e) => {
     const input = e as Input
-    const tools = (await $.tool.list()).map(t => t.name)
     if (!input.mode) {
       return { result: input.keep || input.defer ? `Not saved: pass mode to save.\n${await listing($)}` : await listing($) }
     }
@@ -111,6 +110,7 @@ export const register: Register = on => {
     const list = { keep: input.keep ?? [], defer: input.defer ?? [] }
     if (!isList(list)) return { result: 'Not saved: keep and defer must be lists of tool names.' }
     await $.store.set('list', list)
+    const tools = (await $.tool.list()).map(t => t.name)
     return { result: ['Saved custom mode. It applies from the next conversation.', ...warnings(tools, list)].join(' ') }
   })
 }

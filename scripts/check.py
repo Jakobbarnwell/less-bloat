@@ -3,7 +3,7 @@
 
 Runs five steps through a local proxy that records every request to api.anthropic.com, each with
 an MCP server that asks to stay loaded, with as many tools as the desktop app has:
-  1. two prompts in one process, then /clear and a third,
+  1. two prompts in one process, then /clear, /less-bloat and a third,
   2. a resume of the first conversation with a third prompt, a compaction, and a fourth prompt,
   3. a conversation that saves custom mode through the setup tool, as /less-bloat does, then
      /clear and a prompt: it loads NotebookEdit and one of the server's tools, and defers Write,
@@ -17,6 +17,7 @@ It checks that:
   - later prompts in a process, and a resume, send the same tools and system prompt, and a resume
     after two prompts the same conversation;
   - no step records a tool as announced, as a -p run has nowhere to show the notice;
+  - /less-bloat works after a /clear, and leaves the model its note;
   - each step has the setup tool; the setup saves to the store, and the saving conversation stays
     in default mode while the one after its /clear is in custom mode; the conversation after the
     first /clear needs no longer a note than the first.
@@ -238,7 +239,7 @@ def main():
             return json.load(f)
 
     try:
-        session = step('two prompts', default, ['Say ok.', 'Say ok again.', '/clear', 'Say ok after clearing.'])
+        session = step('two prompts', default, ['Say ok.', 'Say ok again.', '/clear', '/less-bloat', 'Say ok after clearing.'])
         step('resume', default, ['Say ok a third time.', '/compact', 'Say ok once more.'], '--resume', session)
         step('save', default, [SAVE, '/clear', 'Say ok.'], '--max-turns', '4', '--allowedTools', 'mcp__less-bloat__setup')
         # The prompt after /clear starts the next conversation, which is in custom mode.
@@ -289,6 +290,8 @@ def main():
 
     # The resume sends the third prompt, the compaction, and the fourth prompt.
     two, resumed, save, cleared, custom_run, custom_resumed = (s['requests'] for s in steps)
+    if two[2:] and 'The user ran /less-bloat' not in json.dumps(two[2]['request']['messages']):
+        failures.append('/less-bloat after /clear left the model no note')
     if not any('Saved custom mode' in json.dumps(x['request']['messages']) for x in save):
         failures.append('the setup did not save custom mode')
     sent = tuple(len(r) for r in (two, resumed, cleared, custom_run, custom_resumed))

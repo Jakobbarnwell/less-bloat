@@ -6,10 +6,10 @@ import type { List } from './tools'
 // register.ts answers.
 const NAME = 'setup'
 
-export const COMMAND = { name: 'less-bloat', description: 'Show which tools are in full and which name-only, and change them' }
+export const COMMAND = { name: 'less-bloat', description: 'Show which tools are in full and which are name-only' }
 
 // What /less-bloat shows below the list, and what it leaves the model.
-export const CHANGE = 'To change it, tell Claude, such as "keep my browser tools in full" or "go back to default mode". Changes apply from your next conversation.'
+export const CHANGE = 'To change it, tell Claude what you want, for example to keep your browser tools in full, or to go back to default mode. Changes apply from your next conversation.'
 export const NOTE_TO_MODEL = `The user ran /less-bloat, which showed them which tools are in full and which are name-only. If they ask to change that, use the mcp__less-bloat__${NAME} tool, fetching it with ToolSearch if it's name-only, and follow its description.`
 
 const DESCRIPTION = `Shows and changes which tools Claude sees with their full description in every request, and which by name only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps in full, and an MCP server's that connects after the first message and asks for its full description. Run it as a short setup with the user:
@@ -95,19 +95,26 @@ export function notice(tools: string[], first: boolean): { toast: string; line: 
     if (server) servers.set(server, (servers.get(server) ?? 0) + 1)
     else own.push(n)
   }
-  // Biggest servers first. Some connectors' only name is an ID, such as 1a59c906-04da-….
-  const counted = [...servers].sort((a, b) => b[1] - a[1])
-    .map(([s, n]) => `${/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s) ? 'a connector' : s} (${n})`)
+  // Biggest servers first. Some connectors' only name is an ID, such as 1a59c906-04da-…, so they
+  // are counted together.
+  const sorted = [...servers].sort((a, b) => b[1] - a[1])
+  const isId = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s)
+  const named = sorted.filter(([s]) => !isId(s)).map(([s, n]) => `${s} (${n})`)
+  const unnamed = sorted.filter(([s]) => isId(s))
+  const unnamedTools = unnamed.reduce((sum, [, n]) => sum + n, 0)
   const names = [
     ...(own.length ? [some(own)] : []),
-    ...(servers.size ? [`MCP ${servers.size === 1 ? 'server' : 'servers'} ${some(counted)}`] : []),
+    ...(named.length ? [`MCP ${named.length === 1 ? 'server' : 'servers'} ${some(named)}`] : []),
+    ...(unnamed.length ? [`${unnamed.length === 1 ? 'a connector' : `${unnamed.length} connectors`} (${unnamedTools})`] : []),
   ].join(', plus ')
-  const count = `${tools.length}${first ? '' : ' new'} ${tools.length === 1 ? 'tool' : 'tools'}`
-  const toast = `${count} ${tools.length === 1 ? 'is' : 'are'} now name-only. /less-bloat to see or change.`
+  const one = tools.length === 1
+  const count = `${tools.length}${first ? '' : ' new'} ${one ? 'tool' : 'tools'}`
+  // Most tools are name-only anyway; the toast counts only the ones that asked for more.
+  const toast = `${count} that asked to be in full ${one ? 'is' : 'are'} now name-only. See /less-bloat.`
   const line = [
     `less-bloat made ${count} name-only: ${names}.`,
-    tools.length === 1 ? 'It asked for its' : 'They asked for their',
-    'full description in every request; Claude now fetches it only when it uses the tool.',
+    one ? 'It asked for its full description in every request; Claude now fetches it only when it uses the tool.'
+      : 'They asked for their full descriptions in every request; Claude now fetches each only when it uses that tool.',
     '/less-bloat to see or change.',
   ].join(' ')
   return { toast, line }

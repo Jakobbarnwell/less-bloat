@@ -66,8 +66,8 @@ without asking Claude.
 **Does a name-only tool still cost tokens?** Only its name, in Claude Code's list of name-only tools.
 Its description and schema come in when Claude fetches them.
 
-**Will I know what it changed?** Your first session shows a toast, and a line in the transcript,
-naming the tools that asked for their full description and got name-only. After that, you get one
+**Will I know what it changed?** Your first session shows a toast with how many tools asked for
+their full description and got name-only, and a line in the transcript naming them. After that, you get one
 only for a new tool, such as a newly added MCP server's, once. A `claude -p` run has nowhere to
 show it, so it waits for a session that does. `/less-bloat` lists them all, and Claude changes any of them.
 
