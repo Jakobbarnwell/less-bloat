@@ -63,8 +63,8 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
     ...(list ? [`Custom mode's keep list: ${list.keep.join(', ') || 'empty'}. Its defer list: ${list.defer.join(', ') || 'empty'}.`] : []),
     'Full description:',
     ...tools.filter(n => full.has(n)).map(n => `- ${n}: ${why(n)}`),
-    ...section('Name-only, though they asked for their full description:', nameOnly.filter(n => asked.includes(n))),
-    ...section('Name-only:', nameOnly.filter(n => !asked.includes(n))),
+    ...section('Name-only by less-bloat, which Claude Code would put in full:', nameOnly.filter(n => asked.includes(n))),
+    ...section('Name-only by design:', nameOnly.filter(n => !asked.includes(n))),
     ...section('Placed with the next request:', pending),
   ].join('\n')
 }
@@ -82,7 +82,7 @@ function section(heading: string, tools: string[]): string[] {
 }
 
 // The notice for tools that asked for their full description and got their name only: a count in a
-// toast short enough for the CLI's small box, and the names as a line in the transcript. The first
+// toast, and the names as a line in the transcript. The first
 // conversation less-bloat shows one in names the tools there already were, so it doesn't call them
 // new.
 export function notice(tools: string[], first: boolean): { toast: string; line: string } {
@@ -106,13 +106,15 @@ export function notice(tools: string[], first: boolean): { toast: string; line: 
     ...(unnamed.length ? [`${unnamed.length === 1 ? 'a connector' : `${unnamed.length} connectors`} (${unnamedTools})`] : []),
   ].join(', plus ')
   const one = tools.length === 1
-  const count = `${tools.length}${first ? '' : ' new'} ${one ? 'tool' : 'tools'}`
-  // Most tools are name-only anyway; the toast counts only the ones that asked for more.
-  const toast = `${count} that asked to be in full ${one ? 'is' : 'are'} now name-only. See /less-bloat.`
+  const count = `${tools.length}${first ? '' : ' new'}`
+  const noun = one ? 'tool' : 'tools'
+  // Most tools are name-only by design; the toast counts only the ones Claude Code would put in full.
+  // The engine shows it under less-bloat's name.
+  const toast = `${count} non-essential ${noun} that asked to bloat your system prompt ${one ? 'is' : 'are'} now name-only. See /less-bloat.`
   const line = [
-    `less-bloat made ${count} name-only: ${names}.`,
-    one ? 'It asked for its full description in every system prompt; Claude now fetches it only when it uses the tool.'
-      : 'They asked for their full descriptions in every system prompt; Claude now fetches each only when it uses that tool.',
+    `less-bloat made ${count} ${noun} name-only: ${names}.`,
+    one ? 'Claude Code would put its full description in every system prompt; Claude now fetches it only when it uses the tool.'
+      : 'Claude Code would put their full descriptions in every system prompt; Claude now fetches each only when it uses that tool.',
     '/less-bloat to see or change.',
   ].join(' ')
   return { toast, line }
@@ -152,8 +154,8 @@ export function same(a: List, b: List): boolean {
 type Row = { label: string; note: string; tools: string[]; isServer: boolean }
 
 // The recommended tools one per row, with why; the others, built-in one per row and MCP ones one
-// row per server. A note says why a tool is in full, or that it asked to be.
-export function rows(tools: string[], asked: string[]): Row[] {
+// row per server.
+export function rows(tools: string[]): Row[] {
   const recommended = Object.keys(RECOMMENDED).filter(n => tools.includes(n))
     .map(n => ({ label: label(n), note: RECOMMENDED[n]!, tools: [n], isServer: false }))
   const servers = new Map<string, string[]>()
@@ -161,11 +163,11 @@ export function rows(tools: string[], asked: string[]): Row[] {
   for (const n of tools.filter(n => !RECOMMENDED[n]).sort()) {
     const server = n.match(/^mcp__(.+?)__/)?.[1]
     if (server) servers.set(server, [...(servers.get(server) ?? []), n])
-    else own.push({ label: n, note: asked.includes(n) ? 'asked to be in full' : '', tools: [n], isServer: false })
+    else own.push({ label: n, note: '', tools: [n], isServer: false })
   }
   const grouped = [...servers].map(([server, names]) => ({
     label: /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(server) ? `connector ${server.slice(0, 8)}` : server,
-    note: names.some(n => asked.includes(n)) ? 'asked to be in full' : '',
+    note: '',
     tools: names,
     isServer: true,
   }))

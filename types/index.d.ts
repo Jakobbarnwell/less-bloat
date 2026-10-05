@@ -8,10 +8,9 @@ export type Named = string[] | null
 // ones to make name-only.
 export type SavedList = { keep: string[]; defer: string[] }
 
-// What the settings pane draws: the conversation's tools, the ones that asked to be in full, the
-// saved list (null in default mode), the list as edited, a line after saving, and the key of the
-// button the keyboard is on.
-export type Pane = { tools: string[]; asked: string[]; saved: SavedList | null; draft: SavedList; status: string; ring: string } | null
+// What the settings pane draws: the conversation's tools, the ones in full without less-bloat, the
+// saved list (null in default mode), the list as edited, and a line after saving.
+export type Pane = { tools: string[]; asked: string[]; saved: SavedList | null; draft: SavedList; status: string } | null
 
 declare module 'claude-code' {
   interface PluginState {
@@ -22,6 +21,8 @@ declare module 'claude-code' {
       // One value per session id.
       named: StateFamily<Named>
       pane: Pane
+      // The key of the pane's button the keyboard is on.
+      ring: string
     }
   }
 }

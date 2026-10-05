@@ -5,7 +5,7 @@ import { CHANGE, COMMAND, DEFAULT, notice, report, rows, same, SETUP, switched, 
 import type { Input } from './setup'
 import { isList, isNames, loadedInFull, REQUIRED } from './tools'
 import type { List } from './tools'
-import type { Pane } from '../types'
+import type { Pane, SavedList } from '../types'
 
 // Each conversation's state is kept by its session id, which /clear and a resume change, and a
 // reload of the mod keeps: the tools deferred as its first prompt went out, and each tool's
@@ -110,13 +110,10 @@ export const register: Register = on => {
     if (!shown) return <Text dimColor>Run /less-bloat again.</Text>
     const isDefault = !shown.draft.keep.length && !shown.draft.defer.length
     const isSaved = same(shown.draft, shown.saved ?? DEFAULT)
-    // A row goes to full unless all of it is, read from the list as it is when pressed. It leaves
-    // its list; the keyboard's ring stays in place, on the button that takes its place, unannounced.
-    const toggle = (key: string, tools: string[]) => edit($, p => {
-      const kept = loadedInFull(p.draft)
-      const moved = { ...p, draft: switched(p.draft, tools, !tools.every(n => kept.has(n))), status: '' }
-      const after = buttons(moved)
-      return { ...moved, ring: after[Math.min(buttons(p).indexOf(key), after.length - 1)] ?? '' }
+    // A row goes to full unless all of it is, read from the list as it is when pressed.
+    const toggle = (tools: string[]) => redraft($, draft => {
+      const kept = loadedInFull(draft)
+      return switched(draft, tools, !tools.every(n => kept.has(n)))
     })
     const { all, fullRows, nameOnlyRows } = lists(shown)
     const first = [...fullRows, ...nameOnlyRows][0]
@@ -133,7 +130,7 @@ export const register: Register = on => {
                 {row.note ? <Text dimColor>  {row.note}</Text> : null}
               </Text>
             </Box>
-            <Button key={`row:${row.label}`} autoFocus={row === first || undefined} onPress={() => toggle(`row:${row.label}`, row.tools)}>
+            <Button key={`row:${row.label}`} autoFocus={row === first || undefined} onPress={() => toggle(row.tools)}>
               {action}
             </Button>
           </Box>
@@ -150,7 +147,7 @@ export const register: Register = on => {
           </Text>
           <Box flexDirection="row" gap={1}>
             <Button key="save" variant="primary" hotkey="s" onPress={() => save($)}>Save</Button>
-            <Button key="default" hotkey="d" onPress={() => edit($, p => ({ ...p, draft: DEFAULT, status: '' }))}>
+            <Button key="default" hotkey="d" onPress={() => redraft($, () => DEFAULT)}>
               Back to default
             </Button>
             {/* The terminal draws its own close mark; a desktop draws this as its native one. */}
@@ -160,31 +157,36 @@ export const register: Register = on => {
           </Box>
         </Box>
         {/* The terminal's keys, as Claude Code's own menus list theirs; a desktop is clicked. */}
-        {e.surface === 'terminal' ? <Text dimColor>↑/↓ to move · Enter to switch · s to save · d for default · Esc to close</Text> : null}
+        {e.surface === 'terminal' ? <Text dimColor>↑/↓ to move · Enter to select · s to save · d for default · Esc to close</Text> : null}
         <Text dimColor>
           {shown.status ||
-            "A tool in full has its full description in every system prompt. A name-only tool has just its name there, and Claude fetches the description when it needs the tool. A saved change applies from your next conversation."}
+            "A tool in full has its full description in every system prompt. A name-only tool is listed by name, and Claude fetches its description when it needs the tool. A saved change applies from your next conversation."}
         </Text>
-        {section('In full', 'full description in every system prompt', fullRows, 'Make name-only')}
+        {section('In full', 'in every system prompt', fullRows, 'Make name-only')}
         {section('Name-only', 'description fetched when needed', nameOnlyRows, 'Make full')}
       </Box>
     )
   })
 
-  // Where the keyboard's ring is in the pane, for the arrows.
+  // Where the keyboard's ring is in the pane, for the arrows. Kept apart from the pane's state, so
+  // a move doesn't redraw it.
   on('ui.focus', { component: 'Pane', requestId: PANE_ID }, async ($, e, next) => {
     const result = await next(e)
-    if (!result.deny) await edit($, p => ({ ...p, ring: e.element ?? '' }))
+    if (!result.deny) await $.state.set(RING, e.element ?? '')
     return result
   })
 
-  // Up and down move the ring a button at a time, as in Claude Code's own menus, where the engine
-  // would scroll the pane a row; the ring's move scrolls it into view. The wheel and page keys scroll.
+  // In the terminal, up and down move the ring a button at a time, as in Claude Code's own menus,
+  // where the engine would scroll the pane a row (or more, summed while this hook ran); the ring's
+  // move scrolls it into view. The wheel and the page keys scroll, and a desktop scrolls as it does.
+  // The event doesn't say which surface sent it, so a session with none but the terminal's is one.
   on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, async ($, e, next) => {
     const { value: shown } = await $.state.get(PANE)
-    if (!shown || e.origin.kind !== 'person' || e.pointer || Math.abs(e.by) !== 1) return next(e)
+    if (!shown || e.origin.kind !== 'person' || e.pointer || Math.abs(e.by) >= e.bodyRows) return next(e)
+    if ((await $.session.surfaces()).some(surface => surface !== 'terminal')) return next(e)
+    const { value: ring } = await $.state.get(RING)
     const keys = buttons(shown)
-    const key = keys[Math.min(Math.max(keys.indexOf(shown.ring) + e.by, 0), keys.length - 1)]!
+    const key = keys[Math.min(Math.max(keys.indexOf(ring ?? '') + e.by, 0), keys.length - 1)]!
     if ((await $.ui.focus({ requestId: PANE_ID, key })).deny) return next(e)
     await $.ui.scroll({ to: { key }, in: PANE_ID })
     return {}
@@ -289,9 +291,10 @@ async function saved($: EngineInterface): Promise<List | undefined> {
   return isList(list) ? list : undefined
 }
 
-// The settings pane's id, and what it draws.
+// The settings pane's id, what it draws, and the key of the button the keyboard is on.
 const PANE_ID = 'less-bloat'
 const PANE = { plugin: 'less-bloat', key: 'pane' } as const
+const RING = { plugin: 'less-bloat', key: 'ring' } as const
 
 // Opens the pane on this conversation's tools and the saved list. Says whether it is drawn: not
 // without ToolSearch, as then every tool is in full whatever the list.
@@ -300,7 +303,8 @@ async function open($: EngineInterface, list: List | undefined, asked: string[])
   if (!all.includes('ToolSearch')) return false
   // Not the required tools, nor the setup tool: the pane does what it does.
   const tools = all.filter(n => !REQUIRED.includes(n) && n !== 'mcp__less-bloat__setup')
-  await $.state.set(PANE, { tools, asked, saved: list ?? null, draft: list ?? DEFAULT, status: '', ring: '' })
+  await $.state.set(PANE, { tools, asked, saved: list ?? null, draft: list ?? DEFAULT, status: '' })
+  await $.state.set(RING, '')
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 
@@ -322,21 +326,40 @@ async function save($: EngineInterface) {
 // its tools is, and counts its tools.
 function lists(shown: NonNullable<Pane>) {
   const full = loadedInFull(shown.draft)
-  const all = rows(shown.tools, shown.asked).map(row => {
+  const all = rows(shown.tools).map(row => {
     const inFull = row.tools.filter(n => full.has(n)).length
     const n = row.tools.length
+    const isFull = inFull === n
+    // A name-only row less-bloat made so, which Claude Code would put in full; else Claude Code's own.
+    const isChanged = row.tools.some(n => shown.asked.includes(n) && !full.has(n))
+    const why = row.note || isFull ? row.note : isChanged ? 'name-only by less-bloat' : 'name-only by design'
     const count = !row.isServer ? '' : inFull && inFull < n ? `${inFull} of ${n} in full` : `${n} ${n === 1 ? 'tool' : 'tools'}`
-    return { ...row, isFull: inFull === n, note: [count, row.note].filter(Boolean).join(', ') }
+    return { ...row, isFull, isChanged, note: [count, why].filter(Boolean).join(', ') }
   })
-  // The ones that asked to be in full and still are not first, as they are the ones less-bloat changed.
-  const asking = (row: (typeof all)[number]) => (row.tools.some(n => shown.asked.includes(n) && !full.has(n)) ? 0 : 1)
-  return { all, fullRows: all.filter(row => row.isFull), nameOnlyRows: all.filter(row => !row.isFull).sort((a, b) => asking(a) - asking(b)) }
+  // The ones less-bloat made name-only first.
+  return {
+    all,
+    fullRows: all.filter(row => row.isFull),
+    nameOnlyRows: all.filter(row => !row.isFull).sort((a, b) => Number(b.isChanged) - Number(a.isChanged)),
+  }
 }
 
 // The keys of the pane's buttons in the keyboard's order, as drawn on the terminal.
 function buttons(shown: NonNullable<Pane>) {
   const { fullRows, nameOnlyRows } = lists(shown)
   return ['save', 'default', ...[...fullRows, ...nameOnlyRows].map(row => `row:${row.label}`)]
+}
+
+// Changes the pane's list. Rows move between the lists, and the engine keeps the keyboard's ring at
+// the same position, now on another button, without raising ui.focus, so this records which.
+async function redraft($: EngineInterface, change: (draft: SavedList) => SavedList) {
+  const { value: shown } = await $.state.get(PANE)
+  if (!shown) return
+  const moved = { ...shown, draft: change(shown.draft), status: '' }
+  await $.state.set(PANE, moved)
+  const { value: ring } = await $.state.get(RING)
+  const at = buttons(shown).indexOf(ring ?? '')
+  if (at >= 0) await $.state.set(RING, buttons(moved)[at]!)
 }
 
 // Changes what the pane shows.

@@ -19,12 +19,12 @@ Want to see it work? Ask Claude:
 
 ## How it works
 
-1. Claude Code puts some tools in full: their full description (name, description and schema) is
-   part of every system prompt, whether Claude uses them or not.
-2. The other tools, including most MCP servers', are name-only. When Claude wants to use one, it
-   fetches the full description with ToolSearch.
+1. Claude Code sends some tools in full: their name, description and schema are part of every
+   system prompt, whether Claude uses them or not.
+2. The other tools, including most MCP servers', are name-only by design: listed by name. When
+   Claude wants to use one, it fetches the full description with ToolSearch.
 3. less-bloat makes the rarely needed ones name-only too, built-in or MCP, including the ones that
-   ask for their full description. Only the everyday ones stay in full.
+   ask Claude Code for their full description. Only the everyday ones stay in full.
 
 ## Modes
 
@@ -67,15 +67,16 @@ without ToolSearch, `/less-bloat` prints the list instead.
 **Does a name-only tool still cost tokens?** Only its name, in Claude Code's list of name-only tools.
 Its description and schema come in when Claude fetches them.
 
-**Will I know what it changed?** Your first session shows a toast with how many tools asked for
-their full description and got name-only, and a line in the transcript saying where they're from.
-After that, you get one only for a new tool, such as a newly added MCP server's, once. A
+**Will I know what it changed?** Your first session shows a toast with how many tools less-bloat
+made name-only that Claude Code would put in full, and a line in the transcript saying where they're
+from. After that, you get one only for a new tool, such as a newly added MCP server's, once. A
 `claude -p` run has nowhere to show it, so it waits for a session that does. `/less-bloat` lists
 them all, and you can switch any of them there.
 
 **What happens when I add an MCP server?** Most servers' tools are name-only in Claude Code anyway,
 so nothing changes. One that asks for its full description gets name-only too, with a notice. A
-server that connects after your first message keeps what it asked for until your next conversation.
+server that connects after your first message stays as Claude Code placed it until your next
+conversation.
 
 **Does `/clear` reset less-bloat?** The new conversation starts fresh. less-bloat keeps each
 earlier conversation's placements in memory until Claude Code exits, so `/resume` back to one keeps
@@ -117,8 +118,8 @@ also recommend running `/skill-doctor` to see which skills you use, and disablin
   list as it is now, and with whichever MCP servers have connected by its first prompt, so its first
   request can't reuse the cache when either changed.
 - **A name-only tool's first use takes a ToolSearch call** to fetch its full description.
-- **An MCP server that connects after your first message** keeps what it asked for until your next
-  conversation, as its tools arrive too late to change safely.
+- **An MCP server that connects after your first message** stays as Claude Code placed it until your
+  next conversation, as its tools arrive too late to change safely.
 - **Needs ToolSearch.** Claude Code turns it off with `ENABLE_TOOL_SEARCH=false`, and by default
   behind a custom `ANTHROPIC_BASE_URL` such as a gateway. Then every tool goes in full.
 - **Not in cloud sessions, WSL or Cowork,** which don't load your plugins. In a desktop app
