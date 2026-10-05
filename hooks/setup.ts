@@ -7,7 +7,7 @@ const NAME = 'setup'
 
 export const COMMAND = { name: 'less-bloat', description: 'Choose which tools are in full and which are name-only' }
 
-// What /less-bloat shows below the list where it can't open its pane.
+// What /less-bloat shows below the list in a run with nowhere to draw, such as `claude -p`.
 export const CHANGE = 'To change it, run /less-bloat in a Claude Code session, or ask Claude.'
 
 const DESCRIPTION = `Shows and changes which tools Claude sees with their full description in every request, and which by name only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps in full, and an MCP server's that connects after the first message and asks for its full description. Run it as a short setup with the user:
