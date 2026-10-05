@@ -19,8 +19,8 @@ Want to see it work? Ask Claude:
 
 ## How it works
 
-1. Claude Code puts some tools into its system prompt with their full description: name,
-   description and schema, sent with every request, whether Claude uses them or not.
+1. Claude Code puts some tools in full: their full description (name, description and schema) is
+   part of every system prompt, whether Claude uses them or not.
 2. The other tools, including most MCP servers', are name-only. When Claude wants to use one, it
    fetches the full description with ToolSearch.
 3. less-bloat makes the rarely needed ones name-only too, built-in or MCP, including the ones that

@@ -9,8 +9,9 @@ export type Named = string[] | null
 export type SavedList = { keep: string[]; defer: string[] }
 
 // What the settings pane draws: the conversation's tools, the ones that asked to be in full, the
-// saved list (null in default mode), the list as edited, and a line after saving.
-export type Pane = { tools: string[]; asked: string[]; saved: SavedList | null; draft: SavedList; status: string } | null
+// saved list (null in default mode), the list as edited, a line after saving, and the key of the
+// button the keyboard is on.
+export type Pane = { tools: string[]; asked: string[]; saved: SavedList | null; draft: SavedList; status: string; ring: string } | null
 
 declare module 'claude-code' {
   interface PluginState {

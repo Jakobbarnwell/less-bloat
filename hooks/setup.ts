@@ -10,7 +10,7 @@ export const COMMAND = { name: 'less-bloat', description: 'Choose which tools ar
 // What /less-bloat shows below the list in a run with nowhere to draw, such as `claude -p`.
 export const CHANGE = 'To change it, run /less-bloat in a Claude Code session, or ask Claude.'
 
-const DESCRIPTION = `Shows and changes which tools Claude sees with their full description in every request, and which by name only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps in full, and an MCP server's that connects after the first message and asks for its full description. Run it as a short setup with the user:
+const DESCRIPTION = `Shows and changes which tools Claude sees with their full description in every system prompt, and which by name only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps in full, and an MCP server's that connects after the first message and asks for its full description. Run it as a short setup with the user:
 1. Call it with no input. It lists this conversation's tools: which have their full description and why, and which are name-only.
 2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools are strongly recommended to keep in full and why. Offer full descriptions for the name-only tools the user is likely to want used unprompted, starting with the ones that asked for theirs, grouped by server, and to make the recommended ones they don't need name-only.
 3. Show the user what changes, old → new, then call it with mode "custom", keep (the tools to give their full description besides the recommended ones) and defer (the recommended tools to make name-only), as exact tool names, or with mode "default" to go back to the recommended list.
@@ -111,8 +111,8 @@ export function notice(tools: string[], first: boolean): { toast: string; line: 
   const toast = `${count} that asked to be in full ${one ? 'is' : 'are'} now name-only. See /less-bloat.`
   const line = [
     `less-bloat made ${count} name-only: ${names}.`,
-    one ? 'It asked for its full description in every request; Claude now fetches it only when it uses the tool.'
-      : 'They asked for their full descriptions in every request; Claude now fetches each only when it uses that tool.',
+    one ? 'It asked for its full description in every system prompt; Claude now fetches it only when it uses the tool.'
+      : 'They asked for their full descriptions in every system prompt; Claude now fetches each only when it uses that tool.',
     '/less-bloat to see or change.',
   ].join(' ')
   return { toast, line }
