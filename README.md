@@ -31,9 +31,9 @@ Want to see it work? Ask Claude:
 - **Default** keeps the full description for Bash, Read, Edit, Write, Glob, Grep, Agent, Skill,
   AskUserQuestion and SendUserFile, plus the desktop app's chapter, side-task and widget tools when
   you're in the app, and a project thread's reply tools.
-- **Custom** is your own list. Run `/less-bloat` to open a pane with every tool, in full or
-  name-only, and why the recommended ones are in full. Switch any of them and save, or ask Claude
-  to. Your choice holds for every session, CLI and desktop alike.
+- **Custom** is your own list. Run `/less-bloat` to open a pane with your tools, an MCP server's
+  together, each in full or name-only, and why the recommended ones are in full. Switch any of them
+  and save, or ask Claude to. Your choice holds for every session, CLI and desktop alike.
 
 A change applies from your next conversation: a new session or `/clear`. The tools sit at the start
 of every request, so changing them mid-conversation would throw away the prompt cache.
@@ -60,8 +60,8 @@ since Claude fetches all the others with it.
 
 ## FAQ
 
-**How do I see which tools are in full?** Run `/less-bloat`. It opens the pane straight away,
-without asking Claude. In a `claude -p` run it prints the list.
+**How do I see which tools are in full?** Run `/less-bloat`. Its pane shows what new conversations
+get. To see this conversation's, ask Claude; a `claude -p` run of `/less-bloat` prints it too.
 
 **Does a name-only tool still cost tokens?** Only its name, in Claude Code's list of name-only tools.
 Its description and schema come in when Claude fetches them.
