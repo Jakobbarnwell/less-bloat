@@ -12,7 +12,7 @@ export const CHANGE = 'To change it, run /less-bloat in a Claude Code session, o
 
 const DESCRIPTION = `Shows and changes which tools Claude sees with their full description in every system prompt, and which by name only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps in full, and an MCP server's that connects after the first message and asks for its full description. Run it as a short setup with the user:
 1. Call it with no input. It lists this conversation's tools: which have their full description and why, and which are name-only.
-2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools are strongly recommended to keep in full and why. Offer full descriptions for the name-only tools the user is likely to want used unprompted, starting with the ones that asked for theirs, grouped by server, and to make the recommended ones they don't need name-only.
+2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools are strongly recommended to keep in full and why. Offer full descriptions for the name-only tools the user is likely to want used unprompted, starting with the ones name-only by less-bloat, grouped by server, and to make the recommended ones they don't need name-only.
 3. Show the user what changes, old → new, then call it with mode "custom", keep (the tools to give their full description besides the recommended ones) and defer (the recommended tools to make name-only), as exact tool names, or with mode "default" to go back to the recommended list.
 Changes apply from the next conversation: a new session or /clear.`
 
@@ -63,8 +63,9 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
     ...(list ? [`Custom mode's keep list: ${list.keep.join(', ') || 'empty'}. Its defer list: ${list.defer.join(', ') || 'empty'}.`] : []),
     'Full description:',
     ...tools.filter(n => full.has(n)).map(n => `- ${n}: ${why(n)}`),
+    ...section('Name-only in custom mode:', nameOnly.filter(n => list?.defer.includes(n))),
     ...section('Name-only by less-bloat, which Claude Code would put in full:', nameOnly.filter(n => asked.includes(n))),
-    ...section('Name-only by design:', nameOnly.filter(n => !asked.includes(n))),
+    ...section('Name-only by design:', nameOnly.filter(n => !asked.includes(n) && !list?.defer.includes(n))),
     ...section('Placed with the next request:', pending),
   ].join('\n')
 }
@@ -82,9 +83,8 @@ function section(heading: string, tools: string[]): string[] {
 }
 
 // The notice for tools that asked for their full description and got their name only: a count in a
-// toast, and the names as a line in the transcript. The first
-// conversation less-bloat shows one in names the tools there already were, so it doesn't call them
-// new.
+// toast, and the names as a line in the transcript. The first conversation less-bloat shows one in
+// names the tools there already were, so it doesn't call them new.
 export function notice(tools: string[], first: boolean): { toast: string; line: string } {
   const servers = new Map<string, number>()
   const own: string[] = []

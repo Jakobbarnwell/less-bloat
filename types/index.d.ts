@@ -8,8 +8,9 @@ export type Named = string[] | null
 // ones to make name-only.
 export type SavedList = { keep: string[]; defer: string[] }
 
-// What the settings pane draws: the conversation's tools, the ones in full without less-bloat, the
-// saved list (null in default mode), the list as edited, and a line after saving.
+// What the settings pane draws: the conversation's tools, the ones the notice has told about (in
+// full without less-bloat), the saved list (null in default mode), the list as edited, and a line
+// after saving.
 export type Pane = { tools: string[]; asked: string[]; saved: SavedList | null; draft: SavedList; status: string } | null
 
 declare module 'claude-code' {

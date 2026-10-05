@@ -304,7 +304,6 @@ async function open($: EngineInterface, list: List | undefined, asked: string[])
   // Not the required tools, nor the setup tool: the pane does what it does.
   const tools = all.filter(n => !REQUIRED.includes(n) && n !== 'mcp__less-bloat__setup')
   await $.state.set(PANE, { tools, asked, saved: list ?? null, draft: list ?? DEFAULT, status: '' })
-  await $.state.set(RING, '')
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 
@@ -332,7 +331,7 @@ function lists(shown: NonNullable<Pane>) {
     const isFull = inFull === n
     // A name-only row less-bloat made so, which Claude Code would put in full; else Claude Code's own.
     const isChanged = row.tools.some(n => shown.asked.includes(n) && !full.has(n))
-    const why = row.note || isFull ? row.note : isChanged ? 'name-only by less-bloat' : 'name-only by design'
+    const why = row.note || (isFull ? '' : isChanged ? 'name-only by less-bloat' : 'name-only by design')
     const count = !row.isServer ? '' : inFull && inFull < n ? `${inFull} of ${n} in full` : `${n} ${n === 1 ? 'tool' : 'tools'}`
     return { ...row, isFull, isChanged, note: [count, why].filter(Boolean).join(', ') }
   })
@@ -353,13 +352,17 @@ function buttons(shown: NonNullable<Pane>) {
 // Changes the pane's list. Rows move between the lists, and the engine keeps the keyboard's ring at
 // the same position, now on another button, without raising ui.focus, so this records which.
 async function redraft($: EngineInterface, change: (draft: SavedList) => SavedList) {
-  const { value: shown } = await $.state.get(PANE)
-  if (!shown) return
-  const moved = { ...shown, draft: change(shown.draft), status: '' }
-  await $.state.set(PANE, moved)
+  // update() may run the change again on a clash, so the last run's pane is the one written.
+  let shown: Pane = null
+  let moved: Pane = null
+  await update($, PANE, p => {
+    shown = p ?? null
+    moved = shown && { ...shown, draft: change(shown.draft), status: '' }
+    return moved
+  })
   const { value: ring } = await $.state.get(RING)
-  const at = buttons(shown).indexOf(ring ?? '')
-  if (at >= 0) await $.state.set(RING, buttons(moved)[at]!)
+  const at = shown && moved ? buttons(shown).indexOf(ring ?? '') : -1
+  if (at >= 0) await $.state.set(RING, buttons(moved!)[at]!)
 }
 
 // Changes what the pane shows.
