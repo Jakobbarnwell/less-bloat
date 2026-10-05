@@ -124,7 +124,7 @@ export const register: Register = on => {
       return { ...row, isFull: inFull === n, note: [count, row.note].filter(Boolean).join(', ') }
     })
     const fullRows = all.filter(row => row.isFull)
-    // The ones that asked to be in full and are not first, as they are the ones less-bloat changed.
+    // The ones that asked to be in full and still are not first, as they are the ones less-bloat changed.
     const asking = (row: (typeof all)[number]) => (row.tools.some(n => shown.asked.includes(n) && !full.has(n)) ? 0 : 1)
     const nameOnlyRows = all.filter(row => !row.isFull).sort((a, b) => asking(a) - asking(b))
     const first = [...fullRows, ...nameOnlyRows][0]
@@ -152,7 +152,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap={1}>
         {/* Clear of the close mark the terminal draws in the pane's top corner. */}
-        <Box flexDirection="row" justifyContent="space-between" gap={2} paddingRight={2}>
+        <Box flexDirection="row" justifyContent="space-between" gap={2} paddingRight={e.surface === 'terminal' ? 2 : 0}>
           <Text bold>
             {isDefault ? 'Default mode' : 'Custom mode'}
             <Text dimColor>{isSaved ? ' · saved' : ' · not saved'}</Text>
