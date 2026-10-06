@@ -68,12 +68,14 @@ export function same(a: List, b: List): boolean {
   return key(a) === key(b)
 }
 
-// A description's first sentence: up to the first stop followed by a capital, or its first line,
-// cut at a word within 200 characters.
+// A description's first sentence: up to the first stop followed by anything but a lowercase word,
+// within its first paragraph, which ends at a blank line or a list, its lines joined, as wrapped
+// docstrings need. Cut at a word within 200 characters.
 export function firstSentence(description: string): string {
-  const [line = ''] = description.trim().split(/\r?\n/)
-  const sentence = line.trim().match(/^(.+?(?<!\be\.g|\bi\.e)[.!?])(?=\s+[A-Z(`"]|$)/)?.[1] ?? line.trim()
-  return sentence.length <= 200 ? sentence : `${sentence.slice(0, 201).replace(/\s+\S*$/, '')}…`
+  const [paragraph = ''] = description.trim().split(/\r?\n\s*(?:\n|[-*•]\s|\d+\.\s)/)
+  const text = paragraph.replace(/\s+/g, ' ')
+  const sentence = text.match(/^(.+?(?<!\b(?:[eE]\.g|[iI]\.e|vs))[.!?])(?=\s+[^a-z\s]|$)/)?.[1] ?? text
+  return sentence.length <= 200 ? sentence : `${sentence.slice(0, 201).replace(/\s+\S*$/, '').slice(0, 200)}…`
 }
 
 // The tools to load in full. Custom mode starts from default mode's list and applies its changes,

@@ -15,7 +15,7 @@ It checks that:
     engine's notices or the mod's note name every other tool, from the first request on; ToolSearch, being required,
     stays; default mode loads Bash, Read, Edit, Write, Agent and Skill;
   - every request gives a tool that asked to stay loaded and got its name only its first sentence,
-    and none to one the engine defers itself;
+    and none to one the engine defers itself or one in full;
   - later prompts in a process, and a resume, send the same tools and system prompt, and a resume
     after two prompts the same conversation;
   - no step records a tool as announced, as a -p run has nowhere to show the notice;
@@ -46,7 +46,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PLUGIN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NOTICE_HEADING = 'deferred tools are now available'
 NOTE = 'Also deferred behind ToolSearch; load with "select:<name>": '
-SENTENCES = 'These deferred tools, by the first sentence of their description:'
+SENTENCES = 'Name-only tools of the main conversation, by the first sentence of their description:'
 
 
 def default_lists():
@@ -75,7 +75,7 @@ SAVE = (f'Call mcp__less-bloat__setup with mode "custom", keep {json.dumps(CUSTO
 # desktop app's servers.
 PROBE = """
 import json, sys
-DESCRIPTIONS = {'pong': 'Replies pong, e.g. "pong". It takes no input.\\r\\nIt never fails.'}
+DESCRIPTIONS = {'pong': 'Replies pong, e.g. "pong",\\r\\nto any input. It never fails.\\r\\n\\r\\nIt takes no input.'}
 schema = {'type': 'object', 'properties': {}}
 for line in sys.stdin:
     message = json.loads(line)
@@ -190,7 +190,7 @@ def lines_after(request, heading):
 def notice(request):
     """Every tool name the engine's notices and the mod's note in a request give. A notice is a
     heading, then one tool per line; the note one line."""
-    return set(lines_after(request, NOTICE_HEADING)) | noted(request)
+    return {n for n, text in lines_after(request, NOTICE_HEADING).items() if text is None} | noted(request)
 
 
 def noted(request):
@@ -305,13 +305,16 @@ def main():
                 failures.append(f'{where} defers {sorted((keep & sent) - loaded)}')
             if unnamed:
                 failures.append(f'{where} never names {sorted(unnamed)}')
-            # The probe's tools ask to stay loaded, so pong, made name-only, keeps its first sentence; a
-            # tool the engine defers itself keeps its name only.
+            # The probe's tools ask to stay loaded, so pong, made name-only, keeps its first sentence,
+            # its wrapped line joined; a tool the engine defers itself keeps its name only, and one
+            # in full needs none.
             sentences = lines_after(request, SENTENCES)
             for name in ENGINE_DEFERRED | {'mcp__probe__pong'}:
-                expected = 'Replies pong, e.g. "pong".' if name == 'mcp__probe__pong' else None
+                expected = 'Replies pong, e.g. "pong", to any input.' if name == 'mcp__probe__pong' else None
                 if sentences.get(name) != expected:
                     failures.append(f'{where} gives {name} the sentence {sentences.get(name)!r}, not {expected!r}')
+            if sentences.keys() & loaded:
+                failures.append(f'{where} gives {sorted(sentences.keys() & loaded)}, in full, a sentence')
             # Typed apart from the mod's source, so a name misspelt there, or renamed by the engine, fails.
             if keep == default and CORE - loaded:
                 failures.append(f'{where} does not load {sorted(CORE - loaded)} in full')

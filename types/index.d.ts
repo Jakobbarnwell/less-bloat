@@ -25,7 +25,7 @@ declare module 'claude-code' {
       // Whether a tool asked for its full description, as first described: Claude Code would give it.
       asked: StateFamily<boolean>
       // The first sentence of a tool that asked for its full description and got its name only, as
-      // first described, or empty: it goes beside the name in the engine's list of deferred tools.
+      // first described, or empty: it goes in a context block of the first message.
       sentence: StateFamily<string>
       // One value per session id.
       named: StateFamily<Named>
