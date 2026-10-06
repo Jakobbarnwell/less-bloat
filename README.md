@@ -6,7 +6,7 @@ Kill the bloat in Claude Code's system prompt, without turning a single tool off
 
 | Tokens to start a session | Without | With less-bloat |
 | --- | --- | --- |
-| CLI, no MCP servers | 15,565 | 10,770 |
+| CLI, no MCP servers | 15,565 | 11,037 |
 | Desktop app, with MCP servers and connectors | 63,712 | 33,983 |
 
 Measured from the API's usage report. The desktop numbers are from one setup, on Claude Code 2.1.286;
@@ -25,7 +25,7 @@ Want to see it work? Ask Claude:
    Claude wants to use one, it fetches the full description with ToolSearch.
 3. less-bloat makes the rest name-only too, built-in or MCP, and they still work the same. Only the
    everyday ones stay in full. A tool that asks Claude Code for its full description keeps its first
-   sentence beside its name, so Claude knows what it's for.
+   sentence, so Claude knows what it's for.
 
 ## Modes
 
@@ -55,19 +55,18 @@ since Claude fetches all the others with it.
   and less-bloat makes the rest name-only.
 - **No setup.** The default works as is.
 - **Small enough to read.** A mod can read and write files, run commands and go online as you, so
-  check what you install. less-bloat is under 800 lines of TypeScript in `hooks/`, and does none of
+  check what you install. less-bloat is about 800 lines of TypeScript in `hooks/`, and does none of
   these. (`scripts/check.py` is a test you run yourself; the plugin never runs it.) It keeps your
   choices, and which tools it has told you about, in Claude Code's own plugin store.
 
 ## Turning tools off
 
-less-bloat makes tools name-only; it doesn't turn any off. To remove a tool, connector or MCP server
-completely:
+less-bloat makes tools name-only; it doesn't turn any off. To remove one completely:
 
 - **Deny it** in `~/.claude/settings.json`, which the CLI and the desktop app both read. A tool's name
   removes that tool, `mcp__<server>` every tool of a server:
   `"permissions": { "deny": ["WebSearch", "mcp__playwright"] }`.
-- **Turn an MCP server off** with `/mcp`, or remove it with `claude mcp remove <name>`.
+- **Turn an MCP server off** with `/mcp`, or remove one you added with `claude mcp remove <name>`.
 - **In the desktop app,** turn connectors off in Settings → Connectors.
 
 ## FAQ
@@ -97,7 +96,7 @@ its prompt cache. That costs a little memory per conversation.
 
 **What happens when a conversation compacts?** Nothing changes for less-bloat. Compaction
 summarizes the messages, but the tools at the start of each request stay as they were, so their
-cache still holds, and Claude Code lists the name-only tools again.
+cache still holds. Claude Code lists the name-only tools again, and less-bloat their first sentences.
 
 ## Install
 

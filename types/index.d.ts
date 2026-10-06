@@ -1,4 +1,4 @@
-// less-bloat's values in $.state, which a reload of the mod keeps. deferred, asked and named are kept per
+// less-bloat's values in $.state, which a reload of the mod keeps. deferred, asked, sentence and named are kept per
 // conversation, by its session id, which /clear and a resume change.
 
 // The tools deferred as a conversation's first prompt went out; null or unset before it.
@@ -24,6 +24,9 @@ declare module 'claude-code' {
       deferred: StateFamily<boolean>
       // Whether a tool asked for its full description, as first described: Claude Code would give it.
       asked: StateFamily<boolean>
+      // The first sentence of a tool that asked for its full description and got its name only, as
+      // first described, or empty: it goes beside the name in the engine's list of deferred tools.
+      sentence: StateFamily<string>
       // One value per session id.
       named: StateFamily<Named>
       pane: Pane

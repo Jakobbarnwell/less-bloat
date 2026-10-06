@@ -17,6 +17,7 @@ import type { Layout, Pane, SavedList } from '../types'
 // The engine names the deferred tools as the first prompt goes out, from the tools described by
 // then, and describes the rest only as it sends the request. This note names those.
 const NOTE = 'Also deferred behind ToolSearch; load with "select:<name>": '
+const SENTENCES = 'These deferred tools, by the first sentence of their description:'
 
 // Tools wait behind ToolSearch, all but the ones loaded in full: the model sees a tool's name and
 // loads its schema when it needs it.
@@ -41,12 +42,13 @@ export const register: Register = on => {
     const asked = !(result.isDeferred ?? e.isDeferred ?? false)
     const isDeferred = loadedInFull(list).has(e.tool) ? false : !named || named.includes(e.tool) || !asked
     const id = `${session}:${e.tool}`
-    const [placed] = await Promise.all([
+    const [placed, wasAsked] = await Promise.all([
       update($, { plugin: 'less-bloat', key: 'deferred', id }, first => first ?? isDeferred),
       update($, { plugin: 'less-bloat', key: 'asked', id }, first => first ?? asked),
+      update($, { plugin: 'less-bloat', key: 'sentence', id }, first => first ?? (asked && isDeferred ? firstSentence(result.description) : '')),
     ])
     // One the user made name-only themselves needs no telling.
-    if (asked && placed && !list?.defer.includes(e.tool)) tell($, e.tool)
+    if (wasAsked && placed && !list?.defer.includes(e.tool)) tell($, e.tool)
     return { ...result, isDeferred: placed }
   })
 
@@ -99,25 +101,17 @@ export const register: Register = on => {
     return result
   })
 
-  // The engine's list of deferred tools gives one name a line. A tool that asked for its full
-  // description and got its name only gets its first sentence there too, so Claude knows to use it,
-  // unless the engine gives it a line of its own.
-  on('prompt.attachment', { type: 'deferred_tools_delta' }, async ($, e, next) => {
+  // Claude Code lists each deferred tool by name only. One that asked for its full description and
+  // got its name only also gets its first sentence, in a block of the first message's context, so
+  // Claude knows what it's for. The engine's list itself is left as it is: it reads its own text.
+  on('prompt.context', async ($, e, next) => {
     const result = await next(e)
-    if (result.text === null) return result
     const session = await $.session.id()
-    const descriptions = new Map((await $.tool.list()).map(t => [t.name, t.description]))
-    const lines = await Promise.all(result.text.split('\n').map(async line => {
-      const description = descriptions.get(line)
-      if (!description) return line
-      const id = `${session}:${line}`
-      const [asked, deferred] = await Promise.all([
-        read($, { plugin: 'less-bloat', key: 'asked', id }),
-        read($, { plugin: 'less-bloat', key: 'deferred', id }),
-      ])
-      return asked && deferred ? `${line}: ${firstSentence(description)}` : line
-    }))
-    return { ...result, text: lines.join('\n') }
+    const tools = (await $.tool.list()).map(t => t.name).sort()
+    const sentences = await Promise.all(tools.map(tool => read($, { plugin: 'less-bloat', key: 'sentence', id: `${session}:${tool}` })))
+    const lines = tools.flatMap((tool, i) => sentences[i] ? [`${tool}: ${sentences[i]}`] : [])
+    if (!lines.length) return result
+    return { ...result, blocks: [...result.blocks, { name: 'nameOnlyTools', text: [SENTENCES, ...lines].join('\n') }] }
   })
 
   // /less-bloat opens the settings pane. A run with nowhere to draw it, such as `claude -p`, or
