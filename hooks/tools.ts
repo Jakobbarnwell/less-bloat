@@ -68,13 +68,14 @@ export function same(a: List, b: List): boolean {
   return key(a) === key(b)
 }
 
-// A description's first sentence: up to the first stop followed by anything but a lowercase word,
-// within its first paragraph, which ends at a blank line or a list, its lines joined, as wrapped
-// docstrings need. Cut at a word within 200 characters.
+// A description's first sentence: up to the first stop followed by anything but a lowercase word or
+// a number, within its first line and the lines that continue it, as a wrapped docstring's do. Cut at
+// a word within 200 characters.
 export function firstSentence(description: string): string {
-  const [paragraph = ''] = description.trim().split(/\r?\n\s*(?:\n|[-*•]\s|\d+\.\s)/)
-  const text = paragraph.replace(/\s+/g, ' ')
-  const sentence = text.match(/^(.+?(?<!\b(?:[eE]\.g|[iI]\.e|vs))[.!?])(?=\s+[^a-z\s]|$)/)?.[1] ?? text
+  const [first = '', ...rest] = description.trim().split(/\r?\n/)
+  const end = rest.findIndex(line => !/^\s*\p{Ll}/u.test(line))
+  const text = [first, ...rest.slice(0, end < 0 ? rest.length : end)].join(' ').replace(/\s+/g, ' ').trim()
+  const sentence = text.match(/^(.+?(?<!\b(?:[eE]\.g|[iI]\.e|vs))[.!?])(?=\s+[^\p{Ll}\d\s]|$)/u)?.[1] ?? text
   return sentence.length <= 200 ? sentence : `${sentence.slice(0, 201).replace(/\s+\S*$/, '').slice(0, 200)}…`
 }
 

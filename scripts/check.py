@@ -46,7 +46,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PLUGIN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NOTICE_HEADING = 'deferred tools are now available'
 NOTE = 'Also deferred behind ToolSearch; load with "select:<name>": '
-SENTENCES = 'Name-only tools of the main conversation, by the first sentence of their description:'
+SENTENCES = 'Some name-only tools of the main conversation, by the first sentence of their description:'
 
 
 def default_lists():
@@ -70,12 +70,20 @@ CUSTOM = {'keep': ['NotebookEdit', 'mcp__probe__ping'], 'defer': ['Write', 'Skil
 SAVE = (f'Call mcp__less-bloat__setup with mode "custom", keep {json.dumps(CUSTOM["keep"])} and defer '
         f'{json.dumps(CUSTOM["defer"])}, loading it with ToolSearch first if it is deferred. Then reply with its result.')
 
+# Descriptions as servers write them, each with the first sentence the mod gives it: a line wrapped
+# mid-sentence, a docstring's summary line with no stop, and one followed by a line of its own.
+DESCRIPTIONS = {
+    'pong': ('Replies pong, e.g. "pong",\r\nto any input. It never fails.\r\n\r\nIt takes no input.', 'Replies pong, e.g. "pong", to any input.'),
+    'more0': ('Get the forecast for a location\n    Args:\n        latitude: its latitude', 'Get the forecast for a location'),
+    'more1': ('Query the database\nReturns rows as JSON. Takes about 2 seconds.', 'Query the database'),
+}
+
 # A stdio MCP server that asks to stay loaded, so it is connected when the session starts, and the
 # mod defers its tools as it does Claude Code's own. It has 150 more tools, about as many as the
 # desktop app's servers.
 PROBE = """
 import json, sys
-DESCRIPTIONS = {'pong': 'Replies pong, e.g. "pong",\\r\\nto any input. It never fails.\\r\\n\\r\\nIt takes no input.'}
+DESCRIPTIONS = __DESCRIPTIONS__
 schema = {'type': 'object', 'properties': {}}
 for line in sys.stdin:
     message = json.loads(line)
@@ -87,7 +95,7 @@ for line in sys.stdin:
         'tools/list': {'tools': [{'name': n, 'description': DESCRIPTIONS.get(n, f'Replies {n}.'), 'inputSchema': schema} for n in ['ping', 'pong'] + [f'more{i}' for i in range(150)]]},
     }.get(message['method'], {})
     print(json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'result': result}), flush=True)
-"""
+""".replace('__DESCRIPTIONS__', repr({n: d for n, (d, _) in DESCRIPTIONS.items()}))
 
 
 def record(exchanges):
@@ -305,12 +313,12 @@ def main():
                 failures.append(f'{where} defers {sorted((keep & sent) - loaded)}')
             if unnamed:
                 failures.append(f'{where} never names {sorted(unnamed)}')
-            # The probe's tools ask to stay loaded, so pong, made name-only, keeps its first sentence,
-            # its wrapped line joined; a tool the engine defers itself keeps its name only, and one
-            # in full needs none.
+            # The probe's tools ask to stay loaded, so those made name-only keep their first sentence; a
+            # tool the engine defers itself keeps its name only, and one in full needs none.
             sentences = lines_after(request, SENTENCES)
-            for name in ENGINE_DEFERRED | {'mcp__probe__pong'}:
-                expected = 'Replies pong, e.g. "pong", to any input.' if name == 'mcp__probe__pong' else None
+            expect = {f'mcp__probe__{n}': sentence for n, (_, sentence) in DESCRIPTIONS.items()}
+            for name in ENGINE_DEFERRED | set(expect):
+                expected = expect.get(name)
                 if sentences.get(name) != expected:
                     failures.append(f'{where} gives {name} the sentence {sentences.get(name)!r}, not {expected!r}')
             if sentences.keys() & loaded:

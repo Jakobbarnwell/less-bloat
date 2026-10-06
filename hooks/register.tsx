@@ -17,7 +17,7 @@ import type { Layout, Pane, SavedList } from '../types'
 // The engine names the deferred tools as the first prompt goes out, from the tools described by
 // then, and describes the rest only as it sends the request. This note names those.
 const NOTE = 'Also deferred behind ToolSearch; load with "select:<name>": '
-const SENTENCES = 'Name-only tools of the main conversation, by the first sentence of their description:'
+const SENTENCES = 'Some name-only tools of the main conversation, by the first sentence of their description:'
 
 // Tools wait behind ToolSearch, all but the ones loaded in full: the model sees a tool's name and
 // loads its schema when it needs it.
@@ -42,11 +42,11 @@ export const register: Register = on => {
     const asked = !(result.isDeferred ?? e.isDeferred ?? false)
     const isDeferred = loadedInFull(list).has(e.tool) ? false : !named || named.includes(e.tool) || !asked
     const id = `${session}:${e.tool}`
-    const placed = await update($, { plugin: 'less-bloat', key: 'deferred', id }, first => first ?? isDeferred)
-    const [wasAsked] = await Promise.all([
+    const [placed, wasAsked] = await Promise.all([
+      update($, { plugin: 'less-bloat', key: 'deferred', id }, first => first ?? isDeferred),
       update($, { plugin: 'less-bloat', key: 'asked', id }, first => first ?? asked),
-      update($, { plugin: 'less-bloat', key: 'sentence', id }, first => first ?? (asked && placed ? firstSentence(result.description) : '')),
     ])
+    await update($, { plugin: 'less-bloat', key: 'sentence', id }, first => first ?? (wasAsked && placed ? firstSentence(result.description) : ''))
     // One the user made name-only themselves needs no telling.
     if (wasAsked && placed && !list?.defer.includes(e.tool)) tell($, e.tool)
     return { ...result, isDeferred: placed }
