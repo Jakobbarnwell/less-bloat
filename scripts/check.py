@@ -14,6 +14,8 @@ It checks that:
   - every request loads in full exactly the tools its mode keeps, of those it carries, and the
     engine's notices or the mod's note name every other tool, from the first request on; ToolSearch, being required,
     stays; default mode loads Bash, Read, Edit, Write, Agent and Skill;
+  - a notice gives a tool that asked to stay loaded and got its name only its first sentence, and
+    one the engine defers itself its name only;
   - later prompts in a process, and a resume, send the same tools and system prompt, and a resume
     after two prompts the same conversation;
   - no step records a tool as announced, as a -p run has nowhere to show the notice;
@@ -57,6 +59,9 @@ def default_lists():
 
 # The tools default mode must keep loaded, of those a -p run has (AskUserQuestion it hasn't).
 CORE = {'Bash', 'Read', 'Edit', 'Write', 'Agent', 'Skill'}
+
+# Tools the engine itself defers, so the mod adds no sentence to their names.
+ENGINE_DEFERRED = {'WebFetch', 'WebSearch', 'NotebookEdit'}
 
 # Custom mode's list, as the setup is asked to save it. Deferring ToolSearch must not take, and the
 # saved list leaves it out.
@@ -166,18 +171,23 @@ def texts(request):
                 yield text
 
 
-def notice(request):
-    """Every tool name the engine's notices and the mod's note in a request give. A notice is a
-    heading, then one name per line; the note one line."""
-    names = set()
+def notice_lines(request):
+    """Each tool the engine's notices in a request name, with the line's text after the name, or
+    None. A notice is a heading, then one tool per line: its name, and maybe `: ` and a sentence."""
+    lines = {}
     for text in texts(request):
         listing = False
         for line in text.splitlines():
-            if listing and re.fullmatch(r'[\w-]+', line):
-                names.add(line)
+            if listing and (match := re.fullmatch(r'([\w-]+)(?:: (.+))?', line)):
+                lines[match[1]] = match[2]
             else:
                 listing = NOTICE_HEADING in line
-    return names | noted(request)
+    return lines
+
+
+def notice(request):
+    """Every tool name the engine's notices and the mod's note in a request give."""
+    return set(notice_lines(request)) | noted(request)
 
 
 def noted(request):
@@ -292,6 +302,12 @@ def main():
                 failures.append(f'{where} defers {sorted((keep & sent) - loaded)}')
             if unnamed:
                 failures.append(f'{where} never names {sorted(unnamed)}')
+            # The probe's tools ask to stay loaded, so one made name-only keeps its first sentence; a
+            # tool the engine defers itself keeps its name only.
+            for name, hint in notice_lines(request).items():
+                expected = f"Replies {name.split('__')[-1]}." if name.startswith('mcp__probe__') else None
+                if name in ENGINE_DEFERRED | {'mcp__probe__pong'} and hint != expected:
+                    failures.append(f'{where} names {name} with {hint!r}, not {expected!r}')
             # Typed apart from the mod's source, so a name misspelt there, or renamed by the engine, fails.
             if keep == default and CORE - loaded:
                 failures.append(f'{where} does not load {sorted(CORE - loaded)} in full')

@@ -23,8 +23,9 @@ Want to see it work? Ask Claude:
    system prompt, whether Claude uses them or not.
 2. The other tools, including most MCP servers', are name-only by design: listed by name. When
    Claude wants to use one, it fetches the full description with ToolSearch.
-3. less-bloat makes the rarely needed ones name-only too, built-in or MCP, including the ones that
-   ask Claude Code for their full description. Only the everyday ones stay in full.
+3. less-bloat makes the rest name-only too, built-in or MCP, and they still work the same. Only the
+   everyday ones stay in full. A tool that asks Claude Code for its full description keeps its first
+   sentence beside its name, so Claude knows what it's for.
 
 ## Modes
 
@@ -46,17 +47,28 @@ since Claude fetches all the others with it.
 
 - **Fewer tokens every turn.** The system prompt goes out with every request. Cutting it makes each
   turn cheaper, stretches your usage limits and leaves more room before compaction.
-- **Nothing is turned off.** Deny rules and `disable*` settings remove tools, and settings can't make
-  a built-in tool or the desktop app's own servers name-only. Here every tool still works: Claude
-  fetches its full description with one ToolSearch call the first time it needs it.
-- **It goes with removing what you never use.** Deny or disable the tools you never want, as Matt
-  Pocock's [article](https://www.aihero.dev/how-to-kill-the-bloat-in-claude-codes-system-prompt)
-  shows, and less-bloat makes the rarely needed rest name-only.
+- **Nothing is turned off.** Settings can remove tools, but can't make a built-in tool or the
+  desktop app's own servers name-only. Here every tool still works: Claude fetches its full
+  description with one ToolSearch call the first time it needs it.
+- **It goes with removing what you never use.** Turn off the tools you never want, as suggested by
+  Matt Pocock's [article](https://www.aihero.dev/how-to-kill-the-bloat-in-claude-codes-system-prompt),
+  and less-bloat makes the rest name-only.
 - **No setup.** The default works as is.
 - **Small enough to read.** A mod can read and write files, run commands and go online as you, so
   check what you install. less-bloat is under 800 lines of TypeScript in `hooks/`, and does none of
   these. (`scripts/check.py` is a test you run yourself; the plugin never runs it.) It keeps your
   choices, and which tools it has told you about, in Claude Code's own plugin store.
+
+## Turning tools off
+
+less-bloat makes tools name-only; it doesn't turn any off. To remove a tool, connector or MCP server
+completely:
+
+- **Deny it** in `~/.claude/settings.json`, which the CLI and the desktop app both read. A tool's name
+  removes that tool, `mcp__<server>` every tool of a server:
+  `"permissions": { "deny": ["WebSearch", "mcp__playwright"] }`.
+- **Turn an MCP server off** with `/mcp`, or remove it with `claude mcp remove <name>`.
+- **In the desktop app,** turn connectors off in Settings → Connectors.
 
 ## FAQ
 
@@ -64,8 +76,9 @@ since Claude fetches all the others with it.
 get. To see this conversation's, ask Claude. Where the pane can't open, such as in `claude -p` or
 without ToolSearch, `/less-bloat` prints the list instead.
 
-**Does a name-only tool still cost tokens?** Only its name, in Claude Code's list of name-only tools.
-Its description and schema come in when Claude fetches them.
+**Does a name-only tool still cost tokens?** Only its name, in Claude Code's list of name-only tools,
+and the first sentence of one that asked for its full description. The rest of its description and
+its schema come in when Claude fetches them.
 
 **Will I know what it changed?** Your first session shows a toast with how many tools less-bloat
 made name-only that Claude Code would put in full, and a line in the transcript saying where they're

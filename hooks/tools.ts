@@ -68,6 +68,14 @@ export function same(a: List, b: List): boolean {
   return key(a) === key(b)
 }
 
+// A description's first sentence: up to the first stop followed by a capital, or its first line,
+// cut at a word under 200 characters. $.tool.list gives at most 300.
+export function firstSentence(description: string): string {
+  const [line = ''] = description.trim().split('\n')
+  const sentence = line.match(/^(.+?[.!?])(?=\s+[A-Z(`"]|$)/)?.[1] ?? line
+  return sentence.length < 200 ? sentence : `${sentence.slice(0, 200).replace(/\s+\S*$/, '')}…`
+}
+
 // The tools to load in full. Custom mode starts from default mode's list and applies its changes,
 // so tools that appear later, or only in another app, follow the default. A tool on both lists is
 // deferred.

@@ -5,7 +5,7 @@ import { buttons, counts, elsewhere, fullness, items, state, switched, toolCount
 import type { Item, Row } from './pane'
 import { CHANGE, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
-import { DEFAULT, effective, isEmpty, isList, isNames, loadedInFull, REQUIRED, same } from './tools'
+import { DEFAULT, effective, firstSentence, isEmpty, isList, isNames, loadedInFull, REQUIRED, same } from './tools'
 import type { List } from './tools'
 import type { Layout, Pane, SavedList } from '../types'
 
@@ -97,6 +97,27 @@ export const register: Register = on => {
     const result = await next(e)
     if (untold.size) announce($)
     return result
+  })
+
+  // The engine's list of deferred tools gives one name a line. A tool that asked for its full
+  // description and got its name only gets its first sentence there too, so Claude knows to use it,
+  // unless the engine gives it a line of its own.
+  on('prompt.attachment', { type: 'deferred_tools_delta' }, async ($, e, next) => {
+    const result = await next(e)
+    if (result.text === null) return result
+    const session = await $.session.id()
+    const descriptions = new Map((await $.tool.list()).map(t => [t.name, t.description]))
+    const lines = await Promise.all(result.text.split('\n').map(async line => {
+      const description = descriptions.get(line)
+      if (!description) return line
+      const id = `${session}:${line}`
+      const [asked, deferred] = await Promise.all([
+        read($, { plugin: 'less-bloat', key: 'asked', id }),
+        read($, { plugin: 'less-bloat', key: 'deferred', id }),
+      ])
+      return asked && deferred ? `${line}: ${firstSentence(description)}` : line
+    }))
+    return { ...result, text: lines.join('\n') }
   })
 
   // /less-bloat opens the settings pane. A run with nowhere to draw it, such as `claude -p`, or
