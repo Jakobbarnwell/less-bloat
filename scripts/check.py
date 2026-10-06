@@ -71,11 +71,13 @@ SAVE = (f'Call mcp__less-bloat__setup with mode "custom", keep {json.dumps(CUSTO
         f'{json.dumps(CUSTOM["defer"])}, loading it with ToolSearch first if it is deferred. Then reply with its result.')
 
 # Descriptions as servers write them, each with the first sentence the mod gives it: a line wrapped
-# mid-sentence, a docstring's summary line with no stop, and one followed by a line of its own.
+# mid-sentence, parameter lines under a summary with no stop, a lowercase line after a stop, and a
+# new sentence on a line of its own.
 DESCRIPTIONS = {
     'pong': ('Replies pong, e.g. "pong",\r\nto any input. It never fails.\r\n\r\nIt takes no input.', 'Replies pong, e.g. "pong", to any input.'),
-    'more0': ('Get the forecast for a location\n    Args:\n        latitude: its latitude', 'Get the forecast for a location'),
-    'more1': ('Query the database\nReturns rows as JSON. Takes about 2 seconds.', 'Query the database'),
+    'more0': ('Get the forecast for a location\n    latitude: its latitude\n    longitude: its longitude', 'Get the forecast for a location'),
+    'more1': ('Create an issue.\nowner and repo are required.', 'Create an issue.'),
+    'more2': ('Query the database\nReturns rows as JSON. Takes about 2 seconds.', 'Query the database'),
 }
 
 # A stdio MCP server that asks to stay loaded, so it is connected when the session starts, and the

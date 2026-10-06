@@ -68,13 +68,18 @@ export function same(a: List, b: List): boolean {
   return key(a) === key(b)
 }
 
-// A description's first sentence: up to the first stop followed by anything but a lowercase word or
-// a number, within its first line and the lines that continue it, as a wrapped docstring's do. Cut at
-// a word within 200 characters.
+// A description's first sentence: its first line, joined by the lines after it that carry on its
+// sentence, as a wrapped docstring's do: ones that start lowercase, after a line that doesn't end in a
+// stop or colon, and aren't a parameter's `name: …`. It ends at the first stop followed by anything but
+// a lowercase word or a number, past e.g., i.e. and vs., and is cut at a word within 200 characters.
 export function firstSentence(description: string): string {
   const [first = '', ...rest] = description.trim().split(/\r?\n/)
-  const end = rest.findIndex(line => !/^\s*\p{Ll}/u.test(line))
-  const text = [first, ...rest.slice(0, end < 0 ? rest.length : end)].join(' ').replace(/\s+/g, ' ').trim()
+  let text = first
+  for (const line of rest) {
+    if (/[.!?:]\s*$/.test(text) || !/^\s*\p{Ll}/u.test(line) || /^\s*[\w-]+:\s/.test(line)) break
+    text += ` ${line}`
+  }
+  text = text.replace(/\s+/g, ' ').trim()
   const sentence = text.match(/^(.+?(?<!\b(?:[eE]\.g|[iI]\.e|vs))[.!?])(?=\s+[^\p{Ll}\d\s]|$)/u)?.[1] ?? text
   return sentence.length <= 200 ? sentence : `${sentence.slice(0, 201).replace(/\s+\S*$/, '').slice(0, 200)}…`
 }
