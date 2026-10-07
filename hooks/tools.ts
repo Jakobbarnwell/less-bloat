@@ -22,14 +22,13 @@ export const RECOMMENDED: Record<string, string> = {
   mcp__ccd_session__mark_chapter: 'its description says when to mark a chapter',
   mcp__ccd_session__spawn_task: 'its description says when to flag a side issue as a task',
   SendUserFile: 'its description says to send you the files Claude makes',
-  mcp__visualize__read_me: 'show_widget calls it first',
+  mcp__visualize__read_me: "show_widget's description says to call it first",
   mcp__visualize__show_widget: 'its description says when to draw a chart or diagram',
   mcp__hearthbot__reply: THREAD,
   mcp__hearthbot__update_status: THREAD,
   mcp__hearthbot__no_reply_needed: THREAD,
 }
 
-// Custom mode's list, as /less-bloat saves it. None saved means default mode.
 // Custom mode's list: the tools default mode keeps in full that the user made name-only. A tool
 // default mode makes name-only stays so.
 export type List = string[]

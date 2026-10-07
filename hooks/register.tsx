@@ -133,6 +133,7 @@ export const register: Register = on => {
     const isTerminal = e.surface === 'terminal'
     const { full, nameOnly, unlisted, made } = counts(shown)
     const absent = elsewhere(shown)
+    const shownRows = rows(shown)
     const marks = isTerminal ? { full: '[x]', nameOnly: '[ ]' } : { full: '☑', nameOnly: '☐' }
     const toggle = (tool: string) => redraft($, draft => (draft.includes(tool) ? draft.filter(t => t !== tool) : [...draft, tool]))
     return (
@@ -156,14 +157,15 @@ export const register: Register = on => {
             <Text dimColor> A tool in full has its description in every system prompt; Claude fetches a name-only tool's when it needs the tool.</Text>
           </Text>
           <Text dimColor>
-            less-bloat keeps these in full, each for the reason beside it. Uncheck the ones you don't need to make them name-only.
-            {unlisted ? ` The other ${toolCount(unlisted)} are always name-only${made ? `, ${made} of them ones Claude Code would put in full` : ''}.` : ''}
+            Default mode keeps these in full, for the reason given. Uncheck the ones you don't need to make them name-only.
+            {unlisted ? ` The other ${toolCount(unlisted)} are name-only${made ? `, ${made} of which Claude Code would put in full` : ''}.` : ''}
           </Text>
           {absent ? <Text dimColor>Custom mode also makes {toolCount(absent)} name-only that this conversation doesn't have.</Text> : null}
           <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
         </Box>
         <Box flexDirection="column" marginTop={1}>
-          {rows(shown).map((row, i) => (
+          {shownRows.length ? null : <Text dimColor>None in this conversation.</Text>}
+          {shownRows.map((row, i) => (
             // The note goes under the name where the two don't fit on one line.
             <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
               <Button key={row.key} plain autoFocus={i === 0 || undefined} onPress={() => toggle(row.tool)}>
@@ -213,7 +215,8 @@ export const register: Register = on => {
     if (!input.mode) {
       return { result: input.nameOnly ? `Not saved: pass mode to save.\n${await listing($)}` : await listing($) }
     }
-    const list = input.mode === 'default' ? [] : input.nameOnly ?? []
+    if (input.mode === 'custom' && !input.nameOnly) return { result: `Not saved: custom mode needs nameOnly.\n${await listing($)}` }
+    const list = input.mode === 'default' ? [] : input.nameOnly
     if (!isNames(list)) return { result: 'Not saved: nameOnly must be a list of tool names.' }
     const tools = (await $.tool.list()).map(t => t.name)
     // Saved without the entries that change nothing, as the pane saves it; none left is default mode.
@@ -323,6 +326,8 @@ async function open($: EngineInterface, list: List): Promise<boolean> {
   // Not the required tools, nor the setup tool: the pane does what it does.
   const tools = all.filter(n => !REQUIRED.includes(n) && n !== 'mcp__less-bloat__setup')
   await $.state.set(PANE, { tools, asked: await askers($, tools), saved: list, draft: list, status: '' })
+  // On none of its buttons until the first row takes the keyboard; a pane with no rows has none.
+  await $.state.set(RING, -1)
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 

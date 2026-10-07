@@ -33,16 +33,15 @@ Want to see it work? Ask Claude:
   AskUserQuestion and SendUserFile, plus the desktop app's chapter, side-task and widget tools when
   you're in the app, and a project thread's reply tools.
 - **Custom** makes some of those name-only too. Run `/less-bloat` to open a pane with the tools
-  default mode keeps in full, each with why: Claude uses it in almost every task, or its description
-  says when to use it, which a name alone can't. Uncheck the ones you don't need and save, or ask
-  Claude to. Your choice holds for every session, CLI and desktop alike. Every other tool stays
-  name-only.
+  default mode keeps in full, each with why it's there. Uncheck the ones you don't need and save, or
+  ask Claude to. Your choice holds for every session, CLI and desktop alike. Custom mode can't put
+  other tools in full.
 
 A change applies from your next conversation: a new session or `/clear`. The tools sit at the start
 of every request, so changing them mid-conversation would throw away the prompt cache.
 
-Claude reaches for name-only tools on its own when their names say what they're for. Keep a tool in
-full when its name doesn't, as Agent's doesn't say when to delegate. ToolSearch always stays in full,
+Claude reaches for name-only tools on its own when their names say what they're for. Leave a tool
+checked when its name doesn't, as Agent's doesn't say when to delegate. ToolSearch always stays in full,
 since Claude fetches all the others with it.
 
 ## Why would I use this

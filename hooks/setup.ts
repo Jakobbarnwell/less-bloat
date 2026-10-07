@@ -5,7 +5,7 @@ import type { List } from './tools'
 // the choices through this tool, which register.tsx answers.
 const NAME = 'setup'
 
-export const COMMAND = { name: 'less-bloat', description: 'Choose which tools are in full and which are name-only' }
+export const COMMAND = { name: 'less-bloat', description: 'Choose which tools stay in full' }
 
 // What /less-bloat shows below the list in a run with nowhere to draw, such as `claude -p`.
 export const CHANGE = 'To change it, run /less-bloat in a Claude Code session, or ask Claude.'
@@ -29,15 +29,16 @@ export type Input = { mode?: 'default' | 'custom'; nameOnly?: string[] }
 // Registered when the session starts.
 export const SETUP = { name: NAME, description: DESCRIPTION, inputSchema: INPUT }
 
-// What a save warns about: a name that matches no tool here (a typo, or a tool of another app or
-// MCP server), and a tool here that default mode doesn't keep in full, which the save leaves out.
+// What a save warns about: a tool default mode keeps in full that this session doesn't have, such
+// as the desktop app's, which is saved; and a name default mode doesn't keep in full, a typo or a
+// tool that is name-only already or required, which isn't.
 export function warnings(tools: string[], list: List): string[] {
   const names = [...new Set(list)]
-  const unknown = names.filter(n => !tools.includes(n))
-  const idle = names.filter(n => tools.includes(n) && !RECOMMENDED[n])
+  const absent = names.filter(n => RECOMMENDED[n] && !tools.includes(n))
+  const left = names.filter(n => !RECOMMENDED[n])
   return [
-    unknown.length ? `No tool in this session has these names: ${unknown.join(', ')}.` : '',
-    idle.length ? `Default mode doesn't keep these in full, so they are name-only already or required: ${idle.join(', ')}.` : '',
+    absent.length ? `Saved, though this session doesn't have them: ${absent.join(', ')}.` : '',
+    left.length ? `Not saved, as default mode doesn't keep these in full: ${left.join(', ')}.` : '',
   ].filter(Boolean)
 }
 
@@ -59,6 +60,7 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
   return [
     `Saved mode: ${list.length ? 'custom' : 'default'}. Surfaces: ${surfaces.join(', ') || 'none (a -p run or the SDK)'}.`,
     ...(placed ? [] : ['ToolSearch is off, so every tool goes in full whatever the mode.']),
+    ...(list.length ? [`Custom mode makes these name-only: ${list.join(', ')}. A save replaces this list.`] : []),
     'Full description:',
     ...tools.filter(n => full.has(n)).map(n => `- ${n}: ${why(n)}`),
     ...section('Name-only in custom mode:', nameOnly.filter(n => list.includes(n))),
@@ -108,12 +110,11 @@ export function notice(tools: string[], first: boolean): { toast: string; line: 
   const noun = one ? 'tool' : 'tools'
   // Most tools are name-only by design; the toast counts only the ones Claude Code would put in full.
   // The engine shows it under less-bloat's name.
-  const toast = `${count} non-essential ${noun} that asked to bloat your system prompt ${one ? 'is' : 'are'} now name-only. See /less-bloat.`
+  const toast = `${count} non-essential ${noun} that asked to bloat your system prompt ${one ? 'is' : 'are'} now name-only.`
   const line = [
     `less-bloat made ${count} ${noun} name-only: ${names}.`,
     one ? 'Claude Code would put its full description in every system prompt; Claude now fetches it only when it uses the tool.'
       : 'Claude Code would put their full descriptions in every system prompt; Claude now fetches each only when it uses that tool.',
-    '/less-bloat to see or change.',
   ].join(' ')
   return { toast, line }
 }
