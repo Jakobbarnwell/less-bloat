@@ -225,7 +225,7 @@ export const register: Register = on => {
     // left, as from a typo, would be default mode, so it saves nothing.
     const kept = effective(list)
     if (input.mode === 'custom' && !kept.length) {
-      return { result: [`Not saved: custom mode needs a tool default mode keeps in full. To go back to default, pass mode "default".`, ...warnings(tools, list)].join(' ') }
+      return { result: [`Not saved: nameOnly names no tool default mode keeps in full. To go back to default, pass mode "default".`, ...warnings(tools, list)].join(' ') }
     }
     const isDefault = !kept.length
     if (isDefault) await $.store.delete('list')
@@ -330,8 +330,9 @@ async function open($: EngineInterface, list: List): Promise<boolean> {
   const tools = (await $.tool.list()).map(t => t.name)
   if (!tools.includes('ToolSearch')) return false
   await $.state.set(PANE, { tools, asked: await askers($, tools), saved: list, draft: list, status: '' })
-  // On none of its buttons until the first row takes the keyboard; a pane with no rows has none.
-  await $.state.set(RING, '')
+  // A new pane is on none of its buttons until the first row takes the keyboard, and one with no
+  // rows has none; a pane already up keeps where its keyboard is.
+  if (!(await $.ui.panes()).some(pane => pane.id === PANE_ID)) await $.state.set(RING, '')
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 
