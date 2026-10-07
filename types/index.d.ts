@@ -25,8 +25,8 @@ declare module 'claude-code' {
       // One value per session id.
       named: StateFamily<Named>
       pane: Pane
-      // Where the keyboard is in the pane: its button's place in the keyboard's order.
-      ring: number
+      // Where the keyboard is in the pane: its button's key, or empty for none of them.
+      ring: string
     }
   }
 }

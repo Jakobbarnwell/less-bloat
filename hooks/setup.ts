@@ -30,8 +30,8 @@ export type Input = { mode?: 'default' | 'custom'; nameOnly?: string[] }
 export const SETUP = { name: NAME, description: DESCRIPTION, inputSchema: INPUT }
 
 // What a save warns about: a tool default mode keeps in full that this session doesn't have, such
-// as the desktop app's, which is saved; and a required tool, one name-only already, and a name of
-// no tool here, a typo or another app's tool, which aren't.
+// as the desktop app's, which is saved; and a required tool, another tool here, and a name of no
+// tool here, a typo or another app's tool, which aren't.
 export function warnings(tools: string[], list: List): string[] {
   const names = [...new Set(list)]
   const absent = names.filter(n => RECOMMENDED[n] && !tools.includes(n))
@@ -42,7 +42,7 @@ export function warnings(tools: string[], list: List): string[] {
   return [
     absent.length ? `Saved, though this session doesn't have them: ${absent.join(', ')}.` : '',
     required.length ? `Not saved, as these are always in full: ${required.join(', ')}.` : '',
-    nameOnly.length ? `Not saved, as these are name-only already: ${nameOnly.join(', ')}.` : '',
+    nameOnly.length ? `Not saved, as only tools default mode keeps in full can be made name-only: ${nameOnly.join(', ')}.` : '',
     unknown.length ? `Not saved, as no tool here has these names and default mode doesn't keep them in full: ${unknown.join(', ')}.` : '',
   ].filter(Boolean)
 }

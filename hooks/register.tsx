@@ -185,7 +185,7 @@ export const register: Register = on => {
   on('ui.focus', { component: 'Pane', requestId: PANE_ID }, async ($, e, next) => {
     const result = await next(e)
     const { value: shown } = await $.state.get(PANE)
-    if (!result.deny && shown) await $.state.set(RING, buttons(shown).indexOf(e.element ?? ''))
+    if (!result.deny && shown) await $.state.set(RING, e.element ?? '')
     return result
   })
 
@@ -199,9 +199,8 @@ export const register: Register = on => {
     if ((await $.session.surfaces()).some(surface => surface !== 'terminal')) return next(e)
     const { value: ring } = await $.state.get(RING)
     const keys = buttons(shown)
-    // A position from a pane opened on other tools can be past the last button. From none of
-    // them, as from the close mark, an arrow goes to Save.
-    const at = Math.min(ring ?? -1, keys.length - 1)
+    // From none of the buttons, as from the close mark, an arrow goes to Save.
+    const at = keys.indexOf(ring ?? '')
     const key = keys[Math.min(Math.max(at + e.by, 0), keys.length - 1)]!
     // Past the first or last button, the engine scrolls to what is above or below it.
     if (key === keys[at]) return next(e)
@@ -222,8 +221,12 @@ export const register: Register = on => {
     const list = input.mode === 'default' ? [] : input.nameOnly
     if (!isNames(list)) return { result: 'Not saved: nameOnly must be a list of tool names.' }
     const tools = (await $.tool.list()).map(t => t.name)
-    // Saved without the entries that change nothing, as the pane saves it; none left is default mode.
+    // Saved without the entries that change nothing, as the pane saves it. Custom mode with none
+    // left, as from a typo, would be default mode, so it saves nothing.
     const kept = effective(list)
+    if (input.mode === 'custom' && !kept.length) {
+      return { result: [`Not saved: custom mode needs a tool default mode keeps in full. To go back to default, pass mode "default".`, ...warnings(tools, list)].join(' ') }
+    }
     const isDefault = !kept.length
     if (isDefault) await $.store.delete('list')
     else await $.store.set('list', kept)
@@ -327,6 +330,8 @@ async function open($: EngineInterface, list: List): Promise<boolean> {
   const tools = (await $.tool.list()).map(t => t.name)
   if (!tools.includes('ToolSearch')) return false
   await $.state.set(PANE, { tools, asked: await askers($, tools), saved: list, draft: list, status: '' })
+  // On none of its buttons until the first row takes the keyboard; a pane with no rows has none.
+  await $.state.set(RING, '')
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 
