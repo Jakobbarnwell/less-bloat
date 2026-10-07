@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import { buttons, counts, elsewhere, rows, toolCount } from './pane'
 import { CHANGE, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
-import { effective, firstSentence, isNames, loadedInFull, REQUIRED, same } from './tools'
+import { effective, firstSentence, isNames, loadedInFull, same } from './tools'
 import type { List } from './tools'
 import type { Pane } from '../types'
 
@@ -216,6 +216,7 @@ export const register: Register = on => {
       return { result: input.nameOnly ? `Not saved: pass mode to save.\n${await listing($)}` : await listing($) }
     }
     if (input.mode === 'custom' && !input.nameOnly) return { result: `Not saved: custom mode needs nameOnly.\n${await listing($)}` }
+    if (input.mode === 'default' && input.nameOnly?.length) return { result: 'Not saved: default mode takes no nameOnly.' }
     const list = input.mode === 'default' ? [] : input.nameOnly
     if (!isNames(list)) return { result: 'Not saved: nameOnly must be a list of tool names.' }
     const tools = (await $.tool.list()).map(t => t.name)
@@ -321,10 +322,8 @@ const RING = { plugin: 'less-bloat', key: 'ring' } as const
 // Opens the pane on this conversation's tools and the saved list. Says whether it is drawn: not
 // without ToolSearch, as then every tool is in full whatever the list.
 async function open($: EngineInterface, list: List): Promise<boolean> {
-  const all = (await $.tool.list()).map(t => t.name)
-  if (!all.includes('ToolSearch')) return false
-  // Not the required tools, nor the setup tool: the pane does what it does.
-  const tools = all.filter(n => !REQUIRED.includes(n) && n !== 'mcp__less-bloat__setup')
+  const tools = (await $.tool.list()).map(t => t.name)
+  if (!tools.includes('ToolSearch')) return false
   await $.state.set(PANE, { tools, asked: await askers($, tools), saved: list, draft: list, status: '' })
   // On none of its buttons until the first row takes the keyboard; a pane with no rows has none.
   await $.state.set(RING, -1)
