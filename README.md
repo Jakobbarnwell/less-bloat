@@ -6,11 +6,11 @@ Kill the bloat in Claude Code's system prompt, without turning a single tool off
 
 | Tokens to start a session | Without | With less-bloat |
 | --- | --- | --- |
-| CLI, no MCP servers | 15,565 | 11,037 |
+| CLI, no MCP servers | 28,002 | 12,334 |
 | Desktop app, with MCP servers and connectors | 63,712 | 33,983 |
 
-Measured from the API's usage report. The desktop numbers are from one setup, on Claude Code 2.1.286;
-yours depend on what you have connected.
+Measured from the API's usage report: the CLI on Claude Code 2.1.289, the desktop app on one setup
+with 2.1.286. Yours depend on your version and what you have connected.
 
 Want to see it work? Ask Claude:
 
