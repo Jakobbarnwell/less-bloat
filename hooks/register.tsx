@@ -242,9 +242,13 @@ async function listing($: EngineInterface): Promise<string> {
 }
 
 // Counting the context, as /context does, describes part of the tools connected now, so the engine
-// names those itself and the note stays short.
+// names those itself and the note stays short. An interactive session computes the first message's
+// context as it starts, before any tool is described, so describing asks for it again, with the
+// sentences of the tools described by now. Not once the first prompt has gone out: changing that
+// message would spend the prompt cache.
 async function describe($: EngineInterface) {
   await $.session.usage({ breakdown: 'summary' })
+  if (!(await read($, { plugin: 'less-bloat', key: 'named', id: await $.session.id() }))) $.ui.invalidate('prompt.context')
 }
 
 // This conversation's placement of each of these tools that has been described.
