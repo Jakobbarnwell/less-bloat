@@ -159,6 +159,7 @@ export const register: Register = on => {
           <Text dimColor>
             Default mode keeps these in full, for the reason given. Uncheck the ones you don't need to make them name-only.
             {unlisted ? ` The other ${toolCount(unlisted)} are name-only${made ? `, ${made} of which Claude Code would put in full` : ''}.` : ''}
+            {' ToolSearch is always in full, as Claude fetches the others with it.'}
           </Text>
           {absent ? <Text dimColor>Custom mode also makes {toolCount(absent)} name-only that this conversation doesn't have.</Text> : null}
           <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
@@ -198,8 +199,9 @@ export const register: Register = on => {
     if ((await $.session.surfaces()).some(surface => surface !== 'terminal')) return next(e)
     const { value: ring } = await $.state.get(RING)
     const keys = buttons(shown)
-    // From none of the buttons, as from the close mark, an arrow goes to Save.
-    const at = ring ?? -1
+    // A position from a pane opened on other tools can be past the last button. From none of
+    // them, as from the close mark, an arrow goes to Save.
+    const at = Math.min(ring ?? -1, keys.length - 1)
     const key = keys[Math.min(Math.max(at + e.by, 0), keys.length - 1)]!
     // Past the first or last button, the engine scrolls to what is above or below it.
     if (key === keys[at]) return next(e)
@@ -212,11 +214,11 @@ export const register: Register = on => {
   // /clear.
   on('tool.call', { tool: 'mcp__less-bloat__setup' }, async ($, e) => {
     const input = e as Input
-    if (!input.mode) {
-      return { result: input.nameOnly ? `Not saved: pass mode to save.\n${await listing($)}` : await listing($) }
+    if (input.mode !== 'default' && input.mode !== 'custom') {
+      return { result: input.mode || input.nameOnly ? `Not saved: pass mode "default" or "custom" to save.\n${await listing($)}` : await listing($) }
     }
     if (input.mode === 'custom' && !input.nameOnly) return { result: `Not saved: custom mode needs nameOnly.\n${await listing($)}` }
-    if (input.mode === 'default' && input.nameOnly?.length) return { result: 'Not saved: default mode takes no nameOnly.' }
+    if (input.mode === 'default' && input.nameOnly?.length) return { result: `Not saved: default mode takes no nameOnly.\n${await listing($)}` }
     const list = input.mode === 'default' ? [] : input.nameOnly
     if (!isNames(list)) return { result: 'Not saved: nameOnly must be a list of tool names.' }
     const tools = (await $.tool.list()).map(t => t.name)
@@ -325,8 +327,6 @@ async function open($: EngineInterface, list: List): Promise<boolean> {
   const tools = (await $.tool.list()).map(t => t.name)
   if (!tools.includes('ToolSearch')) return false
   await $.state.set(PANE, { tools, asked: await askers($, tools), saved: list, draft: list, status: '' })
-  // On none of its buttons until the first row takes the keyboard; a pane with no rows has none.
-  await $.state.set(RING, -1)
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 

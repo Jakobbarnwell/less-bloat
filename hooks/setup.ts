@@ -12,7 +12,7 @@ export const CHANGE = 'To change it, run /less-bloat in a Claude Code session, o
 
 const DESCRIPTION = `Shows and changes which tools Claude sees with their full description in every system prompt, and which by name only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps in full, and an MCP server's that connects after the first message and asks for its full description. Run it as a short setup with the user:
 1. Call it with no input. It lists this conversation's tools: which have their full description and why, and which are name-only.
-2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools default mode keeps in full and why, and offer to make the ones they don't need name-only. The other tools are always name-only.
+2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools default mode keeps in full and why, and offer to make the ones they don't need name-only. Required tools always stay in full.
 3. Show the user what changes, old → new, then call it with mode "custom" and nameOnly (the tools default mode keeps in full to make name-only), as exact tool names, or with mode "default" to keep them all in full.
 Changes apply from the next conversation: a new session or /clear.`
 
@@ -30,17 +30,20 @@ export type Input = { mode?: 'default' | 'custom'; nameOnly?: string[] }
 export const SETUP = { name: NAME, description: DESCRIPTION, inputSchema: INPUT }
 
 // What a save warns about: a tool default mode keeps in full that this session doesn't have, such
-// as the desktop app's, which is saved; a required tool, and a name default mode doesn't keep in
-// full, a typo or a tool that is name-only already, which aren't.
+// as the desktop app's, which is saved; and a required tool, one name-only already, and a name of
+// no tool here, a typo or another app's tool, which aren't.
 export function warnings(tools: string[], list: List): string[] {
   const names = [...new Set(list)]
   const absent = names.filter(n => RECOMMENDED[n] && !tools.includes(n))
   const required = names.filter(n => REQUIRED.includes(n))
   const left = names.filter(n => !RECOMMENDED[n] && !REQUIRED.includes(n))
+  const nameOnly = left.filter(n => tools.includes(n))
+  const unknown = left.filter(n => !tools.includes(n))
   return [
     absent.length ? `Saved, though this session doesn't have them: ${absent.join(', ')}.` : '',
     required.length ? `Not saved, as these are always in full: ${required.join(', ')}.` : '',
-    left.length ? `Not saved, as default mode doesn't keep these in full: ${left.join(', ')}.` : '',
+    nameOnly.length ? `Not saved, as these are name-only already: ${nameOnly.join(', ')}.` : '',
+    unknown.length ? `Not saved, as no tool here has these names and default mode doesn't keep them in full: ${unknown.join(', ')}.` : '',
   ].filter(Boolean)
 }
 
