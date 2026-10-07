@@ -4,17 +4,12 @@
 // The tools deferred as a conversation's first prompt went out; null or unset before it.
 export type Named = string[] | null
 
-// Custom mode's list: the tools to keep in full besides the recommended ones, and the recommended
-// ones to make name-only.
-export type SavedList = { keep: string[]; defer: string[] }
+// Custom mode's list: the tools default mode keeps in full that the user made name-only.
+export type SavedList = string[]
 
 // What the settings pane draws: the conversation's tools, the ones that asked for their full
-// description, the saved list (null in default mode), the list as edited, a line after saving, and
-// the groups opened in the summary layout.
-export type Pane = { tools: string[]; asked: string[]; saved: SavedList | null; draft: SavedList; status: string; open: string[] } | null
-
-// Which of the two layouts the pane draws, while the person picks one.
-export type Layout = 'checklist' | 'summary'
+// description, the saved list (empty in default mode), the list as edited, and a line after saving.
+export type Pane = { tools: string[]; asked: string[]; saved: SavedList; draft: SavedList; status: string } | null
 
 declare module 'claude-code' {
   interface PluginState {
@@ -32,7 +27,6 @@ declare module 'claude-code' {
       pane: Pane
       // Where the keyboard is in the pane: its button's place in the keyboard's order.
       ring: number
-      layout: Layout
     }
   }
 }

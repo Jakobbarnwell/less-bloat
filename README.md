@@ -32,9 +32,11 @@ Want to see it work? Ask Claude:
 - **Default** keeps the full description for Bash, Read, Edit, Write, Glob, Grep, Agent, Skill,
   AskUserQuestion and SendUserFile, plus the desktop app's chapter, side-task and widget tools when
   you're in the app, and a project thread's reply tools.
-- **Custom** is your own list. Run `/less-bloat` to open a pane with your tools, each MCP server's
-  as one row, showing which are in full and why the recommended ones are. Switch any of them and
-  save, or ask Claude to. Your choice holds for every session, CLI and desktop alike.
+- **Custom** makes some of those name-only too. Run `/less-bloat` to open a pane with the tools
+  default mode keeps in full, each with why: Claude uses it in almost every task, or its description
+  says when to use it, which a name alone can't. Uncheck the ones you don't need and save, or ask
+  Claude to. Your choice holds for every session, CLI and desktop alike. Every other tool stays
+  name-only.
 
 A change applies from your next conversation: a new session or `/clear`. The tools sit at the start
 of every request, so changing them mid-conversation would throw away the prompt cache.
@@ -55,7 +57,7 @@ since Claude fetches all the others with it.
   and less-bloat makes the rest name-only.
 - **No setup.** The default works as is.
 - **Small enough to read.** A mod can read and write files, run commands and go online as you, so
-  check what you install. less-bloat is about 800 lines of TypeScript in `hooks/`, and does none of
+  check what you install. less-bloat is about 600 lines of TypeScript in `hooks/`, and does none of
   these. (`scripts/check.py` is a test you run yourself; the plugin never runs it.) It keeps your
   choices, and which tools it has told you about, in Claude Code's own plugin store.
 
@@ -82,8 +84,8 @@ its schema come in when Claude fetches them.
 **Will I know what it changed?** Your first session shows a toast with how many tools less-bloat
 made name-only that Claude Code would put in full, and a line in the transcript saying where they're
 from. After that, you get one only for a new tool, such as a newly added MCP server's, once. A
-`claude -p` run has nowhere to show it, so it waits for a session that does. `/less-bloat` lists
-them all, and you can switch any of them there.
+`claude -p` run has nowhere to show it, so it waits for a session that does. To see them all, ask
+Claude.
 
 **What happens when I add an MCP server?** Most servers' tools are name-only in Claude Code anyway,
 so nothing changes. One that asks for its full description gets name-only too, with a notice. A

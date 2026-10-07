@@ -6,8 +6,8 @@ an MCP server that asks to stay loaded, with as many tools as the desktop app ha
   1. two prompts in one process, then /clear and a third,
   2. a resume of the first conversation with a third prompt, a compaction, and a fourth prompt,
   3. a conversation that saves custom mode through the setup tool, as Claude does, then /clear,
-     a prompt and /less-bloat: it loads NotebookEdit and one of the server's tools, and defers
-     Write, Skill and ToolSearch,
+     a prompt and /less-bloat: it makes Write and Skill name-only, and neither ToolSearch,
+     which is required, nor NotebookEdit, which isn't in full, goes on the list,
   4. a new conversation, which is in custom mode,
   5. a resume of that one-prompt conversation, with a second prompt.
 It checks that:
@@ -19,7 +19,7 @@ It checks that:
   - later prompts in a process, and a resume, send the same tools and system prompt, and a resume
     after two prompts the same conversation;
   - no step records a tool as announced, as a -p run has nowhere to show the notice;
-  - /less-bloat, after a /clear, lists the new conversation: custom mode, with NotebookEdit in full;
+  - /less-bloat, after a /clear, lists the new conversation: custom mode, with Write name-only;
   - each step has the setup tool; the setup saves to the store, and the saving conversation stays
     in default mode while the one after its /clear is in custom mode; the conversation after the
     first /clear needs no longer a note than the first.
@@ -64,11 +64,12 @@ CORE = {'Bash', 'Read', 'Edit', 'Write', 'Agent', 'Skill'}
 # Tools the engine itself defers, so the mod adds no sentence to their names.
 ENGINE_DEFERRED = {'WebFetch', 'WebSearch', 'NotebookEdit'}
 
-# Custom mode's list, as the setup is asked to save it. Deferring ToolSearch must not take, and the
-# saved list leaves it out.
-CUSTOM = {'keep': ['NotebookEdit', 'mcp__probe__ping'], 'defer': ['Write', 'Skill', 'ToolSearch']}
-SAVE = (f'Call mcp__less-bloat__setup with mode "custom", keep {json.dumps(CUSTOM["keep"])} and defer '
-        f'{json.dumps(CUSTOM["defer"])}, loading it with ToolSearch first if it is deferred. Then reply with its result.')
+# Custom mode's list, as the setup is asked to save it, and as it is saved: ToolSearch is required
+# and NotebookEdit name-only already, so neither takes.
+CUSTOM = ['Write', 'Skill', 'ToolSearch', 'NotebookEdit']
+SAVED = ['Write', 'Skill']
+SAVE = (f'Call mcp__less-bloat__setup with mode "custom" and nameOnly {json.dumps(CUSTOM)}, loading it with '
+        'ToolSearch first if it is deferred. Then reply with its result.')
 
 # Descriptions as servers write them, each with the first sentence the mod gives it: a line wrapped
 # mid-sentence, parameter lines under a summary with no stop, a lowercase line after a stop, and a
@@ -200,7 +201,7 @@ def lines_after(request, heading):
 def notice(request):
     """Every tool name the engine's notices and the mod's note in a request give. A notice is a
     heading, then one tool per line; the note one line."""
-    return {n for n, text in lines_after(request, NOTICE_HEADING).items() if text is None} | noted(request)
+    return set(lines_after(request, NOTICE_HEADING)) | noted(request)
 
 
 def noted(request):
@@ -230,7 +231,7 @@ def main():
     cli = sys.argv[1] if len(sys.argv) > 1 else 'claude'
     required, recommended = default_lists()
     default = required | recommended
-    custom = (default | set(CUSTOM['keep'])) - (set(CUSTOM['defer']) - required)
+    custom = default - set(SAVED)
     exchanges, steps = [], []
     failures = []
     server = record(exchanges)
@@ -268,17 +269,16 @@ def main():
         step('resume', default, ['Say ok a third time.', '/compact', 'Say ok once more.'], '--resume', session)
         step('save', default, [SAVE, '/clear', 'Say ok.', '/less-bloat'], '--max-turns', '4', '--allowedTools', 'mcp__less-bloat__setup')
         listed = steps[-1]['results'][-1]
-        if 'Saved mode: custom' not in listed or '- NotebookEdit: added in custom mode' not in listed:
-            failures.append(f'/less-bloat after /clear did not list custom mode with NotebookEdit in full:\n{listed}')
+        made = listed.partition('Name-only in custom mode:\n')[2].partition('Name-only by')[0]
+        if 'Saved mode: custom' not in listed or '- Write: ' not in made:
+            failures.append(f'/less-bloat after /clear did not list custom mode with Write name-only:\n{listed}')
         # The prompt after /clear starts the next conversation, which is in custom mode; /less-bloat sends no request.
         cleared = steps[-1]['requests'][-1:]
         del steps[-1]['requests'][-1:]
         steps.append({**steps[-1], 'name': 'save, after /clear', 'keep': custom, 'requests': cleared})
-        # Saved without ToolSearch, which a list can't make name-only.
-        expected = {**CUSTOM, 'defer': [t for t in CUSTOM['defer'] if t != 'ToolSearch']}
         saved = store().get('list')
-        if saved != expected:
-            failures.append(f'the setup saved {saved or "no list"} to the store at {stores}, not {expected}')
+        if saved != SAVED:
+            failures.append(f'the setup saved {saved or "no list"} to the store at {stores}, not {SAVED}')
         session = step('custom mode', custom, ['Say ok.'])
         step('custom resume', custom, ['Say ok again.'], '--resume', session)
         if 'announced' in store():

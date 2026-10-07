@@ -2,70 +2,51 @@
 // StructuredOutput, which exists only there.
 export const REQUIRED = ['ToolSearch', 'StructuredOutput']
 
-// What default mode keeps loaded in full, and why. A tool counts only where it exists, so the
-// desktop app's tools stay loaded there and cost nothing in the CLI.
+// What default mode keeps in full, and why: the reason for each, as the pane and the setup tool show it.
+// A tool counts only where it exists, so the desktop app's tools stay in full there and cost nothing
+// in the CLI.
+const EVERY_TASK = 'used in almost every task'
+// A project thread's turn must end with one of these, or the engine sends it back.
+const THREAD = "a project thread's turn must end with reply, update_status or no_reply_needed"
 export const RECOMMENDED: Record<string, string> = {
-  Bash: 'strongly recommended: runs every shell command',
-  Read: 'strongly recommended: reads every file',
-  Edit: 'strongly recommended: makes every file edit',
-  Write: 'strongly recommended: creates files',
-  Glob: 'strongly recommended: finds files',
-  Grep: 'strongly recommended: searches files',
-  // Claude uses these unprompted only when it sees their full description.
-  Agent: 'recommended: lets Claude use subagents unprompted',
-  Skill: 'recommended: lets Claude start skills unprompted',
-  AskUserQuestion: 'recommended: lets Claude ask instead of guessing',
-  mcp__ccd_session__mark_chapter: 'recommended: lets Claude mark chapters in long sessions unprompted',
-  mcp__ccd_session__spawn_task: 'recommended: lets Claude offer side tasks unprompted',
-  SendUserFile: 'recommended: sends you the files Claude makes',
-  mcp__visualize__read_me: 'recommended: show_widget needs it first',
-  mcp__visualize__show_widget: 'recommended: draws charts and diagrams inline',
-  // A project thread's turn must end with one of these, or the engine sends it back.
-  mcp__hearthbot__reply: "strongly recommended: a project thread's turn must end with reply, update_status or no_reply_needed",
-  mcp__hearthbot__update_status: "strongly recommended: a project thread's turn must end with reply, update_status or no_reply_needed",
-  mcp__hearthbot__no_reply_needed: "strongly recommended: a project thread's turn must end with reply, update_status or no_reply_needed",
+  Bash: EVERY_TASK,
+  Read: EVERY_TASK,
+  Edit: EVERY_TASK,
+  Write: EVERY_TASK,
+  Glob: EVERY_TASK,
+  Grep: EVERY_TASK,
+  // Each of these says in its description when Claude should use it, which its name alone doesn't.
+  Agent: 'its description says when to use a subagent',
+  Skill: 'its description says when to start a skill',
+  AskUserQuestion: 'its description says when to ask you',
+  mcp__ccd_session__mark_chapter: 'its description says when to mark a chapter',
+  mcp__ccd_session__spawn_task: 'its description says when to flag a side issue as a task',
+  SendUserFile: 'its description says to send you the files Claude makes',
+  mcp__visualize__read_me: 'show_widget calls it first',
+  mcp__visualize__show_widget: 'its description says when to draw a chart or diagram',
+  mcp__hearthbot__reply: THREAD,
+  mcp__hearthbot__update_status: THREAD,
+  mcp__hearthbot__no_reply_needed: THREAD,
 }
 
 // Custom mode's list, as /less-bloat saves it. None saved means default mode.
-export type List = { keep: string[]; defer: string[] }
+// Custom mode's list: the tools default mode keeps in full that the user made name-only. A tool
+// default mode makes name-only stays so.
+export type List = string[]
 
 export function isNames(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(n => typeof n === 'string')
 }
 
-export function isList(value: unknown): value is List {
-  return typeof value === 'object' && value !== null && isNames((value as List).keep) && isNames((value as List).defer)
-}
-
-// Custom mode's list back at the default.
-export const DEFAULT: List = { keep: [], defer: [] }
-
-// The tools a list puts otherwise than default mode does. A list that changes none is default mode.
-export function changes(list: List): string[] {
-  const full = loadedInFull(list)
-  const byDefault = loadedInFull(undefined)
-  return [...new Set([...list.keep, ...list.defer])].filter(t => full.has(t) !== byDefault.has(t))
-}
-
-// The list without the entries that change nothing, as it is saved: a tool already placed so, one
-// kept but also on defer, which wins, and a name repeated.
+// The list as it is saved: only the tools default mode keeps in full, each once. One that changes
+// nothing is default mode's, the empty list.
 export function effective(list: List): List {
-  const changed = new Set(changes(list))
-  return {
-    keep: [...new Set(list.keep)].filter(t => changed.has(t) && !list.defer.includes(t)),
-    defer: [...new Set(list.defer)].filter(t => changed.has(t)),
-  }
-}
-
-// Whether a list is empty, which is default mode's.
-export function isEmpty(list: List): boolean {
-  return !list.keep.length && !list.defer.length
+  return [...new Set(list)].filter(t => RECOMMENDED[t])
 }
 
 // Whether two lists say the same, in any order.
 export function same(a: List, b: List): boolean {
-  const key = (l: List) => JSON.stringify([[...l.keep].sort(), [...l.defer].sort()])
-  return key(a) === key(b)
+  return JSON.stringify([...a].sort()) === JSON.stringify([...b].sort())
 }
 
 // A description's first sentence: its first line, joined by the lines after it that carry on its
@@ -85,12 +66,7 @@ export function firstSentence(description: string): string {
   return sentence.length <= 200 ? sentence : `${sentence.slice(0, 201).replace(/\s+\S*$/, '').slice(0, 200)}…`
 }
 
-// The tools to load in full. Custom mode starts from default mode's list and applies its changes,
-// so tools that appear later, or only in another app, follow the default. A tool on both lists is
-// deferred.
-export function loadedInFull(list: List | undefined): Set<string> {
-  const loaded = new Set([...REQUIRED, ...Object.keys(RECOMMENDED)])
-  for (const n of list?.keep ?? []) loaded.add(n)
-  for (const n of list?.defer ?? []) if (!REQUIRED.includes(n)) loaded.delete(n)
-  return loaded
+// The tools to load in full: default mode's, less the ones custom mode makes name-only.
+export function loadedInFull(list: List): Set<string> {
+  return new Set([...REQUIRED, ...Object.keys(RECOMMENDED)].filter(n => !list.includes(n)))
 }
