@@ -56,9 +56,9 @@ Claude works less well as context fills up.
    system prompt, **whether you normally use these tools or not.**
 2. Normally tools are only mentioned by name in the system prompt. This is by design: when
    Claude wants to use one, **it fetches the full description with ToolSearch.**
-3. **`less-bloat` simply takes most tools that are described up-front and makes then name-only too.** They still work. Claude reatches for their description when needed.
+3. **`less-bloat` simply takes most tools that are described up-front and makes them name-only too.** They still work. Claude reaches for their description when needed.
 
-If `less-bloat` moves a tool's full description out of the system prompt, it retains a small hint: **this ensures Claude still knows what the tools does** and when to fetch the descriptios.
+If `less-bloat` moves a tool's full description out of the system prompt, it retains a small hint: **this ensures Claude still knows what the tool does** and when to fetch its description.
 
 ## Modes
 
@@ -138,7 +138,7 @@ its schema come in when Claude fetches them.
 <details>
 <summary>How does <code>less-bloat</code> work with subagents?</summary>
 
-The same way. Each subagent type comes with its own system prompt and set of tools, and `less-bloat` places those tools as it does yours. What you save depends on the type: a `general-purpose` subagent's first request is about half the size, like the main conversation's. `Explore` and `Plan` have no tools to trim, and carry about 300 tokens more for `less-bloat`'s hints. If you run subagents with tools allowed but ToolSearch off, `less-bloat` won't work and all your tools will be fully described in the system prompt up-front.
+The same way. Each subagent type comes with its own system prompt and set of tools, and `less-bloat` places those tools as it does yours. What you save depends on the type: a `general-purpose` subagent's first request is about half the size, like the main conversation's. `Explore` and `Plan` have no tools to trim, and cost about the same as without it. Each subagent gets hints only for the tools it has. If you run subagents with tools allowed but ToolSearch off, `less-bloat` won't work and all your tools will be fully described in the system prompt up-front.
 
 </details>
 <details>

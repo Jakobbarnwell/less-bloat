@@ -62,7 +62,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PLUGIN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NOTICE_HEADING = 'deferred tools are now available'
 NOTE = 'Also deferred behind ToolSearch; load with "select:<name>": '
-SENTENCES = 'Some name-only tools of the main conversation, by the first sentence of their description:'
 
 
 def default_lists():
@@ -437,15 +436,13 @@ def main():
             if unnamed:
                 failures.append(f'{where} never names {sorted(unnamed)}')
             # The probe's tools ask to stay loaded, so those made name-only keep their first sentence; a
-            # tool the engine defers itself keeps its name only, and one in full needs none.
-            sentences = lines_after(request, SENTENCES)
+            # tool the engine defers itself keeps its name only.
+            sentences = {n: t for n, t in lines_after(request, NOTICE_HEADING).items() if t}
             expect = {f'mcp__probe__{n}': sentence for n, (_, sentence) in DESCRIPTIONS.items()}
             for name in ENGINE_DEFERRED | set(expect):
                 expected = expect.get(name)
                 if sentences.get(name) != expected:
                     failures.append(f'{where} gives {name} the sentence {sentences.get(name)!r}, not {expected!r}')
-            if sentences.keys() & loaded:
-                failures.append(f'{where} gives {sorted(sentences.keys() & loaded)}, in full, a sentence')
             # Typed apart from the mod's source, so a name misspelt there, or renamed by the engine, fails.
             if keep == default and CORE - loaded:
                 failures.append(f'{where} does not load {sorted(CORE - loaded)} in full')

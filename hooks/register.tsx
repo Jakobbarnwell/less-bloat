@@ -13,13 +13,14 @@ import type { Pane } from '../types'
 
 // The engine names the deferred tools described by the first prompt; this note names the rest.
 const NOTE = 'Also deferred behind ToolSearch; load with "select:<name>": '
-const SENTENCES = 'Some name-only tools of the main conversation, by the first sentence of their description:'
 
 export const register: Register = on => {
   // The describing after /clear or a resume, which the next prompt waits for.
   let redescribed: Promise<unknown> = Promise.resolve()
   // Custom mode's list, read once per conversation, so a save applies from the next one.
   let listed: Promise<List> | undefined
+  // After /clear or a resume, each tool's placement, settled once the engine has described it again.
+  let placing = new Map<string, { settled: Promise<void>; settle: () => void }>()
 
   // A tool keeps its first placement all conversation, so the prompt cache holds. One the main loop
   // gets after the first prompt, but a required one, is deferred: the engine then adds it in a
@@ -40,10 +41,11 @@ export const register: Register = on => {
       update($, { plugin: 'less-bloat', key: 'deferred', id }, first => first ?? isDeferred),
       update($, { plugin: 'less-bloat', key: 'asked', id }, first => first ?? asked),
     ])
-    // A late tool gets none, as the first message's context is already sent.
+    // A late tool gets none: one that asked for its full description is added with it.
     await update($, { plugin: 'less-bloat', key: 'sentence', id }, first => first ?? (wasAsked && placed && !late ? firstSentence(result.description) : ''))
     // One that is late, so added in full, or that the user made name-only or keeps in full, needs no telling.
     if (wasAsked && placed && !late && !list.includes(e.tool) && !kept.has(e.tool)) tell($, e.tool)
+    placing.get(e.tool)?.settle()
     return { ...result, isDeferred: placed }
   })
 
@@ -79,9 +81,21 @@ export const register: Register = on => {
     if (restarts) listed = undefined
     const result = await next(e)
     if (restarts) {
+      placing = new Map((await $.tool.list()).map(t => [t.name, settling()]))
       redescribed = new Promise(done => $.clock.after(0, () => describe($).then(done, done)))
     }
     return result
+  })
+
+  // The engine lists the first prompt's name-only tools once this context is computed, from the
+  // placements it has recorded, which /clear and a resume forget: so after one, the context waits for
+  // each tool's.
+  on('prompt.context', async ($, e, next) => {
+    if (!placing.size) return next(e)
+    const placed = Promise.all([...placing.values()].map(p => p.settled))
+    await Promise.race([placed, $.clock.sleep(5_000, { signal: next.signal })]).catch(() => {})
+    placing.clear()
+    return next(e)
   })
 
   // A surface that attaches late, as the desktop app's can, shows what waited for one.
@@ -91,17 +105,19 @@ export const register: Register = on => {
     return result
   })
 
-  // A name-only tool that asked for its full description gets its first sentence in the first
-  // message's context, so Claude knows what it's for. Subagents get the same blocks.
-  on('prompt.context', async ($, e, next) => {
+  // A name-only tool that asked for its full description gets its first sentence where the engine
+  // lists it by name, so Claude knows what it's for. Each agent's list names only its own tools.
+  on('prompt.attachment', { type: 'deferred_tools_delta' }, async ($, e, next) => {
     const result = await next(e)
+    if (!result.text) return result
     const session = await $.session.id()
-    const tools = (await $.tool.list()).map(t => t.name).sort()
-    if (!tools.includes('ToolSearch')) return result
-    const sentences = await Promise.all(tools.map(tool => read($, { plugin: 'less-bloat', key: 'sentence', id: `${session}:${tool}` })))
-    const lines = tools.flatMap((tool, i) => sentences[i] ? [`${tool}: ${sentences[i]}`] : [])
-    if (!lines.length) return result
-    return { ...result, blocks: [...result.blocks, { name: 'nameOnlyTools', text: [SENTENCES, ...lines].join('\n') }] }
+    // Lines that aren't a current tool's name: headings, and tools no longer available.
+    const tools = new Set((await $.tool.list()).map(t => t.name))
+    const lines = await Promise.all(result.text.split('\n').map(async line => {
+      const sentence = tools.has(line) && await read($, { plugin: 'less-bloat', key: 'sentence', id: `${session}:${line}` })
+      return sentence ? `${line}: ${sentence}` : line
+    }))
+    return { text: lines.join('\n') }
   })
 
   // /less-bloat opens the pane, or prints the list where it can't be drawn.
@@ -232,11 +248,17 @@ async function listing($: EngineInterface): Promise<string> {
 }
 
 // Counting the context makes the engine describe the tools connected now. Until the first prompt
-// goes out, the first message's context is computed again, with their sentences; after, that would
-// spend the prompt cache.
+// goes out, the first message's context, with its list of name-only tools, is computed again with
+// their placements; after, that would spend the prompt cache.
 async function describe($: EngineInterface) {
   await $.session.usage({ breakdown: 'summary' })
   if (!(await read($, { plugin: 'less-bloat', key: 'named', id: await $.session.id() }))) $.ui.invalidate('prompt.context')
+}
+
+function settling() {
+  let settle = () => {}
+  const settled = new Promise<void>(done => { settle = done })
+  return { settled, settle }
 }
 
 async function placements($: EngineInterface, tools: string[]): Promise<Record<string, boolean>> {
