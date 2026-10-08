@@ -48,6 +48,37 @@ Claude reaches for name-only tools on its own when their names say what they're 
 checked when its name doesn't, as Agent's doesn't say when to delegate. ToolSearch is always
 described up-front, since Claude fetches all the others with it.
 
+## The tools in the pane
+
+As of Claude Code 2.1.289. Desktop means the desktop app's own tools, there only.
+
+| Tool | What it does | less-bloat default |
+| --- | --- | --- |
+| Bash | Runs shell commands | up-front |
+| Read, Edit, Write | Read, edit and write files | up-front |
+| Glob, Grep | Find files and search them, in versions that have them | up-front |
+| Agent | Hands a task to a subagent | up-front |
+| Skill | Starts a skill | up-front |
+| AskUserQuestion | Asks you a multiple-choice question | up-front |
+| SendUserFile (desktop) | Sends you a file Claude made | up-front |
+| ccd_session: mark_chapter, spawn_task (desktop) | Marks a chapter; flags a side issue as its own task | up-front |
+| visualize: read_me, show_widget (desktop) | Draws charts, diagrams and widgets inline | up-front |
+| hearthbot: reply, update_status, no_reply_needed | Ends a project thread's turn | up-front |
+| Artifact | Publishes an HTML file as a private page on claude.ai | name-only |
+| ListAgents | Lists the subagents and sessions Claude can reach | name-only |
+| ReportFindings | Hands code-review findings to the app to show | name-only |
+| ScheduleWakeup | Sets when a self-paced `/loop` resumes | name-only |
+| SendFeedback | Drafts feedback or a bug report to Anthropic, for you to approve | name-only |
+| Workflow | Runs a script that orchestrates subagents | name-only |
+| SearchPlugins, SuggestPluginInstall, SuggestSkills (desktop) | Find plugins and skills to add | name-only |
+| ccd_session: dismiss_task, read_widget_context (desktop) | Withdraws a side-task chip; reads a widget's state | name-only |
+| Claude_Browser (desktop) | Drives the app's built-in browser | name-only |
+| Claude_Code_iOS_Simulator: control (desktop) | Runs iOS apps in the Simulator | name-only |
+| terminal: read_terminal (desktop) | Reads the app's terminal panel | name-only |
+| An MCP server's tools that ask for their full description | Whatever the server does | name-only |
+
+The pane also lists your own picks. To learn more about a tool, ask Claude.
+
 ## Why would I use this
 
 - **Fewer tokens every turn.** The system prompt goes out with every request. Cutting it makes each
@@ -75,6 +106,10 @@ less-bloat makes tools name-only; it doesn't turn any off. To remove one complet
 - **In the desktop app,** turn connectors off in Settings → Connectors.
 
 ## FAQ
+
+**Does this work for normal Claude, or just Claude Code?** Just Claude Code: the CLI and the
+desktop app's Code tab. Chats on claude.ai or in the Claude apps don't run Claude Code plugins, and
+neither does Cowork.
 
 **How do I see which tools are described up-front?** Run `/less-bloat`. Its pane shows what new
 conversations get. To see this conversation's, ask Claude. Where the pane can't open, such as in
