@@ -5,8 +5,7 @@ import type { Pane } from '../types'
 type Shown = NonNullable<Pane>
 
 // A row of the settings pane: a tool, or an MCP server's tools together, a note on it, and whether
-// the draft has it in full, which the pane calls described up-front. A server's tools placed apart,
-// as the setup tool can save them, count as up-front, its label saying how many are.
+// the draft has it in full, which the pane calls described up-front.
 export type Row = { key: string; label: string; tools: string[]; note: string; inFull: boolean }
 
 // The tools besides default mode's whose place is a choice: the ones Claude Code would put in full,
@@ -18,14 +17,14 @@ export function choices(tools: string[], asked: string[], saved: List): string[]
 
 // The rows, in two groups by where the draft puts them: described up-front, then name-only. Listed
 // are the tools default mode keeps in full, in RECOMMENDED's order, and the choices, an MCP server's
-// tools in one row, as a server's can be many. The rest are required, or name-only in Claude Code
+// tools in one row, as a server's can be many, unless the draft places them apart. The rest are required, or name-only in Claude Code
 // too, so the pane doesn't list them.
 export function rows(shown: Shown): { upFront: Row[]; nameOnly: Row[] } {
   const full = loadedInFull(shown.draft)
   const row = (key: string, tools: string[]): Row => {
-    const up = tools.filter(t => full.has(t)).length
-    const name = tools.length === 1 ? label(tools[0]!) : `${key}: ${up && up < tools.length ? `${up} of ` : ''}${toolCount(tools.length)}`
-    return { key: `row:${key}`, label: name, tools, inFull: up > 0, note: note(tools, shown.asked, up > 0) }
+    const inFull = tools.every(t => full.has(t))
+    const name = tools.length === 1 ? label(tools[0]!) : `${key}: ${toolCount(tools.length)}`
+    return { key: `row:${key}`, label: name, tools, inFull, note: note(tools, shown.asked, inFull) }
   }
   const servers = new Map<string, string[]>()
   for (const n of shown.choices) {
@@ -33,7 +32,11 @@ export function rows(shown: Shown): { upFront: Row[]; nameOnly: Row[] } {
     servers.set(key, [...(servers.get(key) ?? []), n])
   }
   const kept = Object.keys(RECOMMENDED).filter(n => shown.tools.includes(n)).map(n => row(n, [n]))
-  const others = [...servers].map(([key, tools]) => row(key, tools))
+  // A server's tools placed apart, as the setup tool can save them, get a row each.
+  const others = [...servers].flatMap(([key, tools]) => {
+    const up = tools.filter(t => full.has(t)).length
+    return up && up < tools.length ? tools.map(t => row(t, [t])) : [row(key, tools)]
+  })
   return { upFront: [...kept, ...others].filter(r => r.inFull), nameOnly: [...others, ...kept].filter(r => !r.inFull) }
 }
 
@@ -43,7 +46,7 @@ function note(tools: string[], asked: string[], inFull: boolean): string {
   const why = RECOMMENDED[tools[0]!]
   return [
     inFull !== Boolean(why) ? 'your pick' : '',
-    `less-bloat default: ${why ? `up-front, ${why}` : 'name-only, fetched when needed'}`,
+    `less-bloat default: ${why ? `up-front, ${why}` : 'name-only'}`,
     `Claude Code: ${tools.some(t => asked.includes(t)) ? 'up-front' : 'name-only'}`,
   ].filter(Boolean).join(' · ')
 }
