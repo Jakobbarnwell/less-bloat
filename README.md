@@ -42,7 +42,12 @@ claude plugin marketplace add jakobbarnwell/less-bloat
 claude plugin install less-bloat@less-bloat
 ```
 
-It takes effect from the next session. Needs Claude Code 2.1.286 or later. To uninstall:
+</details>
+
+It takes effect from the next session. Needs Claude Code 2.1.286 or later. 
+
+<details>
+<summary>To uninstall</summary>
 
 ```bash
 claude plugin uninstall less-bloat@less-bloat
