@@ -24,7 +24,7 @@ Want to see it work? Ask Claude:
 
 ## Install
 
-Paste this into Claude Code, CLI or desktop:
+(Recommended) Paste this into Claude Code, CLI or desktop:
 
 > Install the `less-bloat` plugin from the `jakobbarnwell/less-bloat` marketplace. Then, based on how
 > I use Claude Code, tell me whether I should use default mode, and whether to turn back on any tools,
