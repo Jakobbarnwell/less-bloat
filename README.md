@@ -12,6 +12,7 @@ One install -> ~50% less tokens in your system prompt
 | --- | --- | --- | --- |
 | CLI, out-of-the-box | 31,728 | 14,153 | 55.4% |
 | Desktop app, out-of-the-box | 63,712 | 33,983 | 46.7% |
+
 <sub>*Measured from real runs' API's usage report: the CLI on Claude Code 2.1.289, the desktop app on one setup
 with 2.1.286. Your numbers depend slightly on your version, what tools you've already disabled, and how many MCPs you have connected.*</sub>
 
