@@ -4,7 +4,7 @@ Kill the bloat in Claude Code's system prompt, without turning a single tool off
 
 A lightweight Claude mod that strips the bloat from the system prompt **without** turning any tools off. 
 
-one install -> ~50% less tokens in your system prompt
+One install -> ~50% less tokens in your system prompt
 
 | Tokens to start a session | Without | With `less-bloat` | Savings (%) |
 | --- | --- | --- | --- |
@@ -196,8 +196,8 @@ cache still holds. Claude Code lists the name-only tools again, and `less-bloat`
 
 ## Limits
 
-- **`/resume` can invalidate the prompt cache under specific conditions.** If you quit a session, change your `less-bloat` settings, and reopen it within the cache's lifetime, the cache gets invalidated.
-- **A name-only tool's first use takes a ToolSearch call** to fetch its full description.
+- If you fully quit a session, change your `less-bloat` settings, and reopen (`/resume`) it within the cache's lifetime, the cache gets invalidated.
+- **A name-only tool's first use takes a ToolSearch call** to fetch its full description. That's why the basic and most used tools stay described up-front. If you use a tool in every session, consider putting it up-front. 
 - **An MCP server that connects late (after your first message)** isn't placed by `less-bloat` in
   that conversation. Claude Code adds its tools in a message instead, which keeps the prompt cache:
   in full if they ask for their full description, by name otherwise.
