@@ -2,7 +2,7 @@
 // StructuredOutput, which exists only there.
 export const REQUIRED = ['ToolSearch', 'StructuredOutput']
 
-// What default mode keeps in full, and why: the reason for each, as the pane and the setup tool show it.
+// What default mode keeps in full, and why: the reason for each, as the setup tool tells Claude.
 // A tool counts only where it exists, so the desktop app's tools stay in full there and cost nothing
 // in the CLI.
 const EVERY_TASK = 'used in almost every task'

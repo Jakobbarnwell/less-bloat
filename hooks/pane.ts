@@ -4,9 +4,10 @@ import type { Pane } from '../types'
 
 type Shown = NonNullable<Pane>
 
-// A row of the settings pane: a tool, or an MCP server's tools together, a note on it, and whether
-// the draft has it in full, which the pane calls described up-front.
-export type Row = { key: string; label: string; tools: string[]; note: string; inFull: boolean }
+// A row of the settings pane: a tool, or an MCP server's tools together, a note on it, whether the
+// draft has it in full, which the pane calls described up-front, and whether that's not where
+// default mode puts it.
+export type Row = { key: string; label: string; tools: string[]; note: string; inFull: boolean; changed: boolean }
 
 // The tools besides default mode's whose place is a choice: the ones Claude Code would put in full,
 // which default mode makes name-only, and any other the saved custom mode keeps in full. Taken as
@@ -24,7 +25,10 @@ export function rows(shown: Shown): { upFront: Row[]; nameOnly: Row[] } {
   const row = (key: string, tools: string[]): Row => {
     const inFull = tools.every(t => full.has(t))
     const name = tools.length === 1 ? label(tools[0]!) : `${key}: ${toolCount(tools.length)}`
-    return { key: `row:${key}`, label: name, tools, inFull, note: note(tools, shown.asked, inFull) }
+    const byDefault = Boolean(RECOMMENDED[tools[0]!])
+    const atFirst = tools.some(t => shown.asked.includes(t))
+    const note = `less-bloat default: ${byDefault ? 'up-front' : 'name-only'} · Claude Code default: ${atFirst ? 'up-front' : 'name-only'}`
+    return { key: `row:${key}`, label: name, tools, inFull, note, changed: inFull !== byDefault }
   }
   const servers = new Map<string, string[]>()
   for (const n of shown.choices) {
@@ -38,17 +42,6 @@ export function rows(shown: Shown): { upFront: Row[]; nameOnly: Row[] } {
     return up && up < tools.length ? tools.map(t => row(t, [t])) : [row(key, tools)]
   })
   return { upFront: [...kept, ...others].filter(r => r.inFull), nameOnly: [...others, ...kept].filter(r => !r.inFull) }
-}
-
-// What a row says after its name: whether its place is the user's pick, where default mode puts it
-// and why, and where Claude Code would.
-function note(tools: string[], asked: string[], inFull: boolean): string {
-  const why = RECOMMENDED[tools[0]!]
-  return [
-    inFull !== Boolean(why) ? 'your pick' : '',
-    `less-bloat default: ${why ? `up-front, ${why}` : 'name-only'}`,
-    `Claude Code: ${tools.some(t => asked.includes(t)) ? 'up-front' : 'name-only'}`,
-  ].filter(Boolean).join(' · ')
 }
 
 // The draft with these tools put in full, or name-only.

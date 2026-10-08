@@ -136,17 +136,25 @@ export const register: Register = on => {
     const unlistedCount = unlisted(shown)
     const absent = elsewhere(shown)
     const { upFront, nameOnly } = rows(shown)
+    // A line of the legend, wrapped clear of its bullet.
+    const bullet = (text: string) => (
+      <Box flexDirection="row"><Text dimColor>• </Text><Text dimColor>{text}</Text></Box>
+    )
     const marks = isTerminal ? { full: '[x]', nameOnly: '[ ]' } : { full: '☑', nameOnly: '☐' }
     // A group of rows under its heading; nothing for none. The first row of the pane takes the keyboard.
     const group = (heading: string, hint: string, list: Row[]) => list.length ? (
       <Box flexDirection="column" marginTop={1}>
         <Text bold>{heading} ({list.reduce((n, r) => n + r.tools.length, 0)})<Text dimColor> {hint}</Text></Text>
         {list.map(row => (
-          // The note goes under the name where the two don't fit on one line.
+          // The note goes under the name where the two don't fit on one line. A Button's label takes no
+          // color, so the name, orange where it's changed, sits beside the mark, which is the button.
           <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
-            <Button key={row.key} plain autoFocus={row.key === (upFront[0] ?? nameOnly[0])?.key || undefined} onPress={() => redraft($, draft => place(draft, row.tools, !row.inFull))}>
-              {`${row.inFull ? marks.full : marks.nameOnly} ${row.label}`}
-            </Button>
+            <Box flexDirection="row" columnGap={1} flexShrink={0}>
+              <Button key={row.key} plain autoFocus={row.key === (upFront[0] ?? nameOnly[0])?.key || undefined} onPress={() => redraft($, draft => place(draft, row.tools, !row.inFull))}>
+                {row.inFull ? marks.full : marks.nameOnly}
+              </Button>
+              <Text {...(row.changed ? { color: 'claude' } : {})}>{row.label}</Text>
+            </Box>
             <Text dimColor>{row.note}</Text>
           </Box>
         ))}
@@ -168,15 +176,16 @@ export const register: Register = on => {
         {/* The terminal's keys, as Claude Code's own menus list theirs; a desktop is clicked. */}
         {isTerminal ? <Text dimColor>↑/↓ move · Enter select · s save · d default · Esc close</Text> : null}
         <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>Each tool says where less-bloat's default puts it and why, where Claude Code on its own would, and "your pick" where you changed it.</Text>
-          {absent ? <Text dimColor>Custom mode also changes {toolCount(absent)} that this conversation doesn't have.</Text> : null}
-          <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
+          {bullet('See the less-bloat default and Claude Code default for each tool. If you\'ve changed a tool from the less-bloat default, it\'s orange.')}
+          {bullet('See github.com/jakobbarnwell/less-bloat for what each tool does, or ask Claude.')}
+          {absent ? bullet(`Custom mode also changes ${toolCount(absent)} that this conversation doesn't have.`) : null}
+          {bullet(shown.status || 'A saved change applies from your next conversation.')}
         </Box>
         {group('Described up-front', 'In every system prompt. Uncheck one you don\'t need.', upFront)}
         {group('Name-only', 'Claude fetches the description when it needs the tool. Check one you use often.', nameOnly)}
         <Box marginTop={1}>
           <Text dimColor>
-            {unlistedCount ? `The other ${toolCount(unlistedCount)} are name-only in Claude Code too. ` : ''}
+            {unlistedCount ? `Not listed: ${toolCount(unlistedCount)} that Claude Code already makes name-only. ` : ''}
             ToolSearch is always described up-front, as Claude fetches the others with it.
           </Text>
         </Box>
