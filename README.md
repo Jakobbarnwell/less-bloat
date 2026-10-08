@@ -14,10 +14,9 @@ with 2.1.286. Yours depend on your version and what you have connected.
 
 Want to see it work? Ask Claude:
 
-> Measure how many tokens less-bloat saves, true to life: start a new interactive Claude Code
-> session with less-bloat and one without it, send "hi" in each, and compare the first request's
+> Start a new interactive Claude Code
+> session with less-bloat (https://github.com/jakobbarnwell/less-bloat) installed and one without it, send "hi" in each, and compare the first request's
 > total input tokens in their transcripts, cached ones included. Turn less-bloat back on after.
-> Don't use `claude -p`, which describes fewer tools up-front.
 
 ## Install
 
