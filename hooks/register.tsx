@@ -177,7 +177,7 @@ export const register: Register = on => {
           {bullet(shown.status || 'A saved change applies from your next conversation.')}
         </Box>
         {group('Described up-front', 'In every system prompt. Uncheck one you don\'t need.', upFront)}
-        {group('Name-only', 'Claude fetches the description when it needs the tool. Check one you use often.', nameOnly)}
+        {group('Name-only', 'Claude fetches the description when it needs the tool. Select to include the tool\'s description up-front.', nameOnly)}
         <Box marginTop={1}>
           <Text dimColor>
             {unlistedCount ? `Not listed: ${toolCount(unlistedCount)} that Claude Code already makes name-only. ` : ''}
