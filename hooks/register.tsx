@@ -1,7 +1,7 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buttons, choices, counts, elsewhere, place, rows, toolCount } from './pane'
+import { buttons, choices, elsewhere, place, rows, toolCount, unlisted } from './pane'
 import type { Row } from './pane'
 import { CHANGE, changes, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
@@ -124,7 +124,8 @@ export const register: Register = on => {
     return (await open($, await saved($))) ? {} : { text: await listing($) }
   })
 
-  // The settings pane /less-bloat opens: each tool whose place is a choice, checked while in full,
+  // The settings pane /less-bloat opens: each tool whose place is a choice, under where it is now,
+  // described up-front (checked) or name-only, each with where default mode and Claude Code put it;
   // toggled to change it from default mode, saved as custom mode's list. It draws from what open()
   // took in, so drawing reads nothing else.
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
@@ -132,21 +133,21 @@ export const register: Register = on => {
     const { value: shown } = await $.state.get(PANE)
     if (!shown) return <Text dimColor>Run /less-bloat again.</Text>
     const isTerminal = e.surface === 'terminal'
-    const { full, nameOnly, unlisted } = counts(shown)
+    const unlistedCount = unlisted(shown)
     const absent = elsewhere(shown)
-    const { trimmed, kept } = rows(shown)
+    const { upFront, nameOnly } = rows(shown)
     const marks = isTerminal ? { full: '[x]', nameOnly: '[ ]' } : { full: '☑', nameOnly: '☐' }
     // A group of rows under its heading; nothing for none. The first row of the pane takes the keyboard.
     const group = (heading: string, hint: string, list: Row[]) => list.length ? (
       <Box flexDirection="column" marginTop={1}>
-        <Text bold>{heading}<Text dimColor> {hint}</Text></Text>
+        <Text bold>{heading} ({list.reduce((n, r) => n + r.tools.length, 0)})<Text dimColor> {hint}</Text></Text>
         {list.map(row => (
           // The note goes under the name where the two don't fit on one line.
           <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
-            <Button key={row.key} plain autoFocus={row.key === (trimmed[0] ?? kept[0])?.key || undefined} onPress={() => redraft($, draft => place(draft, row.tools, !row.inFull))}>
+            <Button key={row.key} plain autoFocus={row.key === (upFront[0] ?? nameOnly[0])?.key || undefined} onPress={() => redraft($, draft => place(draft, row.tools, !row.inFull))}>
               {`${row.inFull ? marks.full : marks.nameOnly} ${row.label}`}
             </Button>
-            {row.note ? <Text dimColor>{row.note}</Text> : null}
+            <Text dimColor>{row.note}</Text>
           </Box>
         ))}
       </Box>
@@ -167,18 +168,15 @@ export const register: Register = on => {
         {/* The terminal's keys, as Claude Code's own menus list theirs; a desktop is clicked. */}
         {isTerminal ? <Text dimColor>↑/↓ move · Enter select · s save · d default · Esc close</Text> : null}
         <Box flexDirection="column" marginTop={1}>
-          <Text>
-            {toolCount(full)} described up-front, {nameOnly} name-only.
-            <Text dimColor> A tool described up-front has its description in every system prompt; Claude fetches a name-only tool's when it needs the tool.</Text>
-          </Text>
+          <Text dimColor>Each tool says where less-bloat's default puts it and why, where Claude Code on its own would, and "your pick" where you changed it.</Text>
           {absent ? <Text dimColor>Custom mode also changes {toolCount(absent)} that this conversation doesn't have.</Text> : null}
           <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
         </Box>
-        {group('Name-only by default.', 'Claude Code would describe these up-front, unless noted. Check one you use often to keep it described up-front.', trimmed)}
-        {group('Described up-front by default.', "Uncheck one you don't need to make it name-only.", kept)}
+        {group('Described up-front', 'In every system prompt. Uncheck one you don\'t need.', upFront)}
+        {group('Name-only', 'Claude fetches the description when it needs the tool. Check one you use often.', nameOnly)}
         <Box marginTop={1}>
           <Text dimColor>
-            {unlisted ? `The other ${toolCount(unlisted)} are name-only in Claude Code too. ` : ''}
+            {unlistedCount ? `The other ${toolCount(unlistedCount)} are name-only in Claude Code too. ` : ''}
             ToolSearch is always described up-front, as Claude fetches the others with it.
           </Text>
         </Box>

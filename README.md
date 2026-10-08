@@ -35,10 +35,11 @@ Want to see it work? Ask Claude:
   AskUserQuestion and SendUserFile, plus the desktop app's chapter, side-task and widget tools when
   you're in the app, and a project thread's reply tools.
 - **Custom** is your own picks. Run `/less-bloat` to open a pane with the tools where the choice
-  matters: the ones Claude Code would describe up-front that less-bloat makes name-only, such as
-  Artifact, and the ones default mode keeps described up-front, each with why it's there. Check a
-  tool you use often to keep it described up-front, uncheck one you don't need, and save, or ask
-  Claude to. Your choice holds for every session, CLI and desktop alike.
+  matters: the ones Claude Code would describe up-front, the ones default mode keeps up-front, and
+  your picks, under where they are now: described up-front or name-only. Each says where
+  less-bloat's default puts it and why, and where Claude Code would. Check a tool you use often,
+  such as Artifact, to describe it up-front, uncheck one you don't need, and save, or ask Claude to.
+  Your choice holds for every session, CLI and desktop alike.
 
 A change applies from your next conversation: a new session or `/clear`. The tools sit at the start
 of every request, so changing them mid-conversation would throw away the prompt cache.

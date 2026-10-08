@@ -5,7 +5,8 @@ import type { Pane } from '../types'
 type Shown = NonNullable<Pane>
 
 // A row of the settings pane: a tool, or an MCP server's tools together, a note on it, and whether
-// the draft has it in full.
+// the draft has it in full, which the pane calls described up-front. A server's tools placed apart,
+// as the setup tool can save them, count as up-front, its label saying how many are.
 export type Row = { key: string; label: string; tools: string[]; note: string; inFull: boolean }
 
 // The tools besides default mode's whose place is a choice: the ones Claude Code would put in full,
@@ -15,23 +16,36 @@ export function choices(tools: string[], asked: string[], saved: List): string[]
   return tools.filter(n => !RECOMMENDED[n] && !REQUIRED.includes(n) && (asked.includes(n) || saved.includes(n)))
 }
 
-// The rows, in two groups: the choices, an MCP server's tools in one row, as a server's can be many;
-// and the tools default mode keeps in full, in RECOMMENDED's order. The rest are required, or
-// name-only in Claude Code too, so the pane doesn't list them.
-export function rows(shown: Shown): { trimmed: Row[]; kept: Row[] } {
+// The rows, in two groups by where the draft puts them: described up-front, then name-only. Listed
+// are the tools default mode keeps in full, in RECOMMENDED's order, and the choices, an MCP server's
+// tools in one row, as a server's can be many. The rest are required, or name-only in Claude Code
+// too, so the pane doesn't list them.
+export function rows(shown: Shown): { upFront: Row[]; nameOnly: Row[] } {
   const full = loadedInFull(shown.draft)
-  const row = (key: string, name: string, tools: string[], note: string): Row =>
-    ({ key: `row:${key}`, label: name, tools, note, inFull: tools.every(t => full.has(t)) })
+  const row = (key: string, tools: string[]): Row => {
+    const up = tools.filter(t => full.has(t)).length
+    const name = tools.length === 1 ? label(tools[0]!) : `${key}: ${up && up < tools.length ? `${up} of ` : ''}${toolCount(tools.length)}`
+    return { key: `row:${key}`, label: name, tools, inFull: up > 0, note: note(tools, shown.asked, up > 0) }
+  }
   const servers = new Map<string, string[]>()
   for (const n of shown.choices) {
     const key = n.match(/^mcp__(.+?)__/)?.[1] ?? n
     servers.set(key, [...(servers.get(key) ?? []), n])
   }
-  // One a saved custom mode keeps in full that didn't ask for it says so.
-  const trimmed = [...servers].map(([key, tools]) => row(key, tools.length > 1 ? `${key}: ${toolCount(tools.length)}` : label(tools[0]!), tools,
-    tools.some(t => shown.asked.includes(t)) ? '' : 'name-only in Claude Code too'))
-  const kept = Object.keys(RECOMMENDED).filter(n => shown.tools.includes(n)).map(n => row(n, label(n), [n], RECOMMENDED[n]!))
-  return { trimmed, kept }
+  const kept = Object.keys(RECOMMENDED).filter(n => shown.tools.includes(n)).map(n => row(n, [n]))
+  const others = [...servers].map(([key, tools]) => row(key, tools))
+  return { upFront: [...kept, ...others].filter(r => r.inFull), nameOnly: [...others, ...kept].filter(r => !r.inFull) }
+}
+
+// What a row says after its name: whether its place is the user's pick, where default mode puts it
+// and why, and where Claude Code would.
+function note(tools: string[], asked: string[], inFull: boolean): string {
+  const why = RECOMMENDED[tools[0]!]
+  return [
+    inFull !== Boolean(why) ? 'your pick' : '',
+    `less-bloat default: ${why ? `up-front, ${why}` : 'name-only, fetched when needed'}`,
+    `Claude Code: ${tools.some(t => asked.includes(t)) ? 'up-front' : 'name-only'}`,
+  ].filter(Boolean).join(' · ')
 }
 
 // The draft with these tools put in full, or name-only.
@@ -41,17 +55,14 @@ export function place(draft: List, tools: string[], inFull: boolean): List {
 
 // The keys of the pane's buttons in the keyboard's order, as drawn on the terminal.
 export function buttons(shown: Shown): string[] {
-  const { trimmed, kept } = rows(shown)
-  return ['save', 'default', ...[...trimmed, ...kept].map(r => r.key)]
+  const { upFront, nameOnly } = rows(shown)
+  return ['save', 'default', ...[...upFront, ...nameOnly].map(r => r.key)]
 }
 
-// How many of the conversation's tools the draft has in full and how many name-only, and how many
-// the pane doesn't list but the required ones.
-export function counts(shown: Shown): { full: number; nameOnly: number; unlisted: number } {
-  const full = loadedInFull(shown.draft)
-  const listed = shown.choices.length + rows(shown).kept.length
-  const n = shown.tools.filter(t => full.has(t)).length
-  return { full: n, nameOnly: shown.tools.length - n, unlisted: shown.tools.filter(t => !REQUIRED.includes(t)).length - listed }
+// How many of the conversation's tools the pane doesn't list but the required ones.
+export function unlisted(shown: Shown): number {
+  const listed = shown.choices.length + Object.keys(RECOMMENDED).filter(n => shown.tools.includes(n)).length
+  return shown.tools.filter(t => !REQUIRED.includes(t)).length - listed
 }
 
 // How many tools the draft changes that this conversation doesn't have, such as the desktop app's.
