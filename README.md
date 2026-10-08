@@ -27,7 +27,8 @@ Want to see it work? Ask Claude:
 Paste this into Claude Code, CLI or desktop:
 
 > Install the `less-bloat` plugin from the `jakobbarnwell/less-bloat` marketplace. Then, based on how
-> I use Claude Code, tell me whether I should use default mode.
+> I use Claude Code, tell me whether I should use default mode, and whether to turn back on any tools,
+> MCP servers or connectors I turned off to save context.
 
 Or install it yourself, in Claude Code:
 
@@ -156,6 +157,15 @@ To remove one:
   `"permissions": { "deny": ["WebSearch", "mcp__playwright"] }`.
 - **Turn an MCP server off** with `/mcp`, or remove one you added with `claude mcp remove <name>`.
 - **In the desktop app,** turn connectors off in Settings → Connectors.
+
+</details>
+<details>
+<summary>I turned tools off to save context. Should I turn them back on?</summary>
+
+If you'd rather have them name-only than gone, yes: remove them from `permissions.deny`, or turn the
+MCP servers or connectors back on. They're name-only, unless your mode keeps one described up-front.
+Ask Claude to set up `less-bloat`, and it checks your settings for tools you turned off. It can't see
+connectors turned off in the desktop app: check Settings → Connectors.
 
 </details>
 <details>
