@@ -168,18 +168,18 @@ export const register: Register = on => {
         {isTerminal ? <Text dimColor>↑/↓ move · Enter select · s save · d default · Esc close</Text> : null}
         <Box flexDirection="column" marginTop={1}>
           <Text>
-            {toolCount(full)} in full, {nameOnly} name-only.
-            <Text dimColor> A tool in full has its description in every system prompt; Claude fetches a name-only tool's when it needs the tool.</Text>
+            {toolCount(full)} described up-front, {nameOnly} name-only.
+            <Text dimColor> A tool described up-front has its description in every system prompt; Claude fetches a name-only tool's when it needs the tool.</Text>
           </Text>
           {absent ? <Text dimColor>Custom mode also changes {toolCount(absent)} that this conversation doesn't have.</Text> : null}
           <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
         </Box>
-        {group('Name-only by default.', 'Claude Code would put these in full, unless noted. Check one you use often to keep it in full.', trimmed)}
-        {group('In full by default.', "Uncheck one you don't need to make it name-only.", kept)}
+        {group('Name-only by default.', 'Claude Code would describe these up-front, unless noted. Check one you use often to keep it described up-front.', trimmed)}
+        {group('Described up-front by default.', "Uncheck one you don't need to make it name-only.", kept)}
         <Box marginTop={1}>
           <Text dimColor>
             {unlisted ? `The other ${toolCount(unlisted)} are name-only in Claude Code too. ` : ''}
-            ToolSearch is always in full, as Claude fetches the others with it.
+            ToolSearch is always described up-front, as Claude fetches the others with it.
           </Text>
         </Box>
       </Box>
@@ -219,15 +219,15 @@ export const register: Register = on => {
   // /clear.
   on('tool.call', { tool: 'mcp__less-bloat__setup' }, async ($, e) => {
     const input = e as Input
-    const given = input.nameOnly || input.full
+    const given = input.nameOnly || input.upFront
     if (input.mode !== 'default' && input.mode !== 'custom') {
       return { result: input.mode || given ? `Not saved: pass mode "default" or "custom" to save.\n${await listing($)}` : await listing($) }
     }
-    if (input.mode === 'custom' && !given) return { result: `Not saved: custom mode needs nameOnly or full.\n${await listing($)}` }
-    if (input.mode === 'default' && (input.nameOnly?.length || input.full?.length)) return { result: `Not saved: default mode takes no nameOnly or full.\n${await listing($)}` }
+    if (input.mode === 'custom' && !given) return { result: `Not saved: custom mode needs nameOnly or upFront.\n${await listing($)}` }
+    if (input.mode === 'default' && (input.nameOnly?.length || input.upFront?.length)) return { result: `Not saved: default mode takes no nameOnly or upFront.\n${await listing($)}` }
     const nameOnly = input.nameOnly ?? []
-    const full = input.full ?? []
-    if (!isNames(nameOnly) || !isNames(full)) return { result: 'Not saved: nameOnly and full must be lists of tool names.' }
+    const full = input.upFront ?? []
+    if (!isNames(nameOnly) || !isNames(full)) return { result: 'Not saved: nameOnly and upFront must be lists of tool names.' }
     const tools = (await $.tool.list()).map(t => t.name)
     const before = await saved($)
     // Saved without the entries that change nothing. Custom mode with none left, as from a typo,

@@ -73,7 +73,7 @@ ENGINE_DEFERRED = {'WebFetch', 'WebSearch', 'NotebookEdit'}
 NAME_ONLY = ['Write', 'Skill', 'ToolSearch', 'NotebookEdit', 'Edit']
 FULL = ['mcp__probe__ping', 'WebFetch', 'Bash', 'Edit', 'mcp__probe__nope']
 SAVED = {'nameOnly': ['Write', 'Skill'], 'full': ['mcp__probe__ping', 'WebFetch']}
-SAVE = (f'Call mcp__less-bloat__setup with mode "custom", nameOnly {json.dumps(NAME_ONLY)} and full {json.dumps(FULL)}, '
+SAVE = (f'Call mcp__less-bloat__setup with mode "custom", nameOnly {json.dumps(NAME_ONLY)} and upFront {json.dumps(FULL)}, '
         'loading it with ToolSearch first if it is deferred. Then reply with its result.')
 
 # Descriptions as servers write them, each with the first sentence the mod gives it: a line wrapped
@@ -275,9 +275,9 @@ def main():
         step('save', default, [SAVE, '/clear', 'Say ok.', '/less-bloat'], '--max-turns', '4', '--allowedTools', 'mcp__less-bloat__setup')
         listed = steps[-1]['results'][-1]
         made = listed.partition('Name-only in custom mode:\n')[2].partition('Name-only by')[0]
-        full = listed.partition('Full description:\n')[2].partition('Name-only')[0]
-        if 'Saved mode: custom' not in listed or '- Write: ' not in made or '- mcp__probe__ping: kept in full in custom mode' not in full:
-            failures.append(f'/less-bloat after /clear did not list custom mode with Write name-only and ping in full:\n{listed}')
+        full = listed.partition('Described up-front:\n')[2].partition('Name-only')[0]
+        if 'Saved mode: custom' not in listed or '- Write: ' not in made or '- mcp__probe__ping: your pick in custom mode' not in full:
+            failures.append(f'/less-bloat after /clear did not list custom mode with Write name-only and ping described up-front:\n{listed}')
         # The prompt after /clear starts the next conversation, which is in custom mode; /less-bloat sends no request.
         cleared = steps[-1]['requests'][-1:]
         del steps[-1]['requests'][-1:]

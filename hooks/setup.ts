@@ -5,27 +5,27 @@ import type { List } from './tools'
 // the choices through this tool, which register.tsx answers.
 const NAME = 'setup'
 
-export const COMMAND = { name: 'less-bloat', description: 'Choose which tools stay in full' }
+export const COMMAND = { name: 'less-bloat', description: 'Choose which tools are described up-front' }
 
 // What /less-bloat shows below the list in a run with nowhere to draw, such as `claude -p`.
 export const CHANGE = 'To change it, run /less-bloat in a Claude Code session, or ask Claude.'
 
-const DESCRIPTION = `Shows and changes which tools Claude sees with their full description in every system prompt, and which by name only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps in full, and an MCP server's that connects after the first message and asks for its full description. Run it as a short setup with the user:
-1. Call it with no input. It lists this conversation's tools: which have their full description and why, and which are name-only.
-2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools default mode keeps in full and why, and which Claude Code would put in full that less-bloat makes name-only. Offer to make the ones in full they don't need name-only, and to keep in full the ones they use often. Required tools always stay in full.
-3. Show the user what changes, old → new, then call it with mode "custom", nameOnly (tools default mode keeps in full to make name-only) and full (other tools to keep in full), as exact tool names, or with mode "default" to undo every change. A save replaces the one before.
+const DESCRIPTION = `Shows and changes which tools are described up-front, with their full description in every system prompt, and which are name-only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps described up-front, and an MCP server's that connects after the first message and asks for its full description. Use these two terms with the user. Run it as a short setup with the user:
+1. Call it with no input. It lists this conversation's tools: which are described up-front and why, and which are name-only.
+2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools default mode keeps described up-front and why, and which Claude Code would describe up-front that less-bloat makes name-only. Offer to make name-only any described up-front they don't need, and to keep described up-front any they use often. Required tools are always described up-front.
+3. Show the user what changes, old → new, then call it with mode "custom", nameOnly (tools to make name-only that default mode keeps described up-front) and upFront (other tools to keep described up-front), as exact tool names, or with mode "default" to undo every change. A save replaces the one before.
 Changes apply from the next conversation: a new session or /clear.`
 
 const INPUT = {
   type: 'object',
   properties: {
     mode: { type: 'string', enum: ['default', 'custom'] },
-    nameOnly: { type: 'array', items: { type: 'string' }, description: 'Exact names of tools default mode keeps in full to make name-only' },
-    full: { type: 'array', items: { type: 'string' }, description: 'Exact names of other tools to keep in full' },
+    nameOnly: { type: 'array', items: { type: 'string' }, description: 'Exact names of tools to make name-only that default mode keeps described up-front' },
+    upFront: { type: 'array', items: { type: 'string' }, description: 'Exact names of other tools to keep described up-front' },
   },
 }
 
-export type Input = { mode?: 'default' | 'custom'; nameOnly?: string[]; full?: string[] }
+export type Input = { mode?: 'default' | 'custom'; nameOnly?: string[]; upFront?: string[] }
 
 // Registered when the session starts.
 export const SETUP = { name: NAME, description: DESCRIPTION, inputSchema: INPUT }
@@ -53,7 +53,7 @@ export function warnings(tools: string[], before: List, nameOnly: List, full: Li
   const absent = saved.filter(n => !tools.includes(n))
   return [
     absent.length ? `Saved, though this session doesn't have them: ${absent.join(', ')}.` : '',
-    required.length ? `Not saved, as these are always in full: ${required.join(', ')}.` : '',
+    required.length ? `Not saved, as these are always described up-front: ${required.join(', ')}.` : '',
     both.length ? `Not saved, as these are in both lists: ${both.join(', ')}.` : '',
     already.length ? `Not saved, as default mode already places these that way: ${already.join(', ')}.` : '',
     unknown.length ? `Not saved, as no tool here has these names: ${unknown.join(', ')}.` : '',
@@ -72,21 +72,21 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
   const why = (n: string) =>
     REQUIRED.includes(n) ? 'required'
       : !placed ? 'ToolSearch is off'
-      : kept.has(n) ? RECOMMENDED[n] ?? 'kept in full in custom mode'
+      : kept.has(n) ? RECOMMENDED[n] ?? 'your pick in custom mode'
       : 'kept as this conversation started, or it arrived later and keeps its own placement'
   const nameOnly = tools.filter(n => !full.has(n) && !pending.includes(n))
   const madeNameOnly = (n: string) => RECOMMENDED[n] && list.includes(n)
   const { nameOnly: made, full: keptFull } = toSaved(list)
   return [
     `Saved mode: ${list.length ? 'custom' : 'default'}. Surfaces: ${surfaces.join(', ') || 'none (a -p run or the SDK)'}.`,
-    ...(placed ? [] : ['ToolSearch is off, so every tool goes in full whatever the mode.']),
+    ...(placed ? [] : ['ToolSearch is off, so every tool is described up-front whatever the mode.']),
     ...(made.length ? [`Custom mode makes these name-only: ${made.join(', ')}.`] : []),
-    ...(keptFull.length ? [`Custom mode keeps these in full: ${keptFull.join(', ')}.`] : []),
+    ...(keptFull.length ? [`Custom mode keeps these described up-front: ${keptFull.join(', ')}.`] : []),
     ...(list.length ? ['A save replaces what custom mode changes.'] : []),
-    'Full description:',
+    'Described up-front:',
     ...tools.filter(n => full.has(n)).map(n => `- ${n}: ${why(n)}`),
     ...section('Name-only in custom mode:', nameOnly.filter(madeNameOnly)),
-    ...section('Name-only by less-bloat, which Claude Code would put in full:', nameOnly.filter(n => asked.includes(n) && !madeNameOnly(n))),
+    ...section('Name-only by less-bloat, which Claude Code would describe up-front:', nameOnly.filter(n => asked.includes(n) && !madeNameOnly(n))),
     ...section('Name-only by design:', nameOnly.filter(n => !asked.includes(n) && !madeNameOnly(n))),
     ...section('Placed with the next request:', pending),
   ].join('\n')
@@ -135,8 +135,8 @@ export function notice(tools: string[], first: boolean): { toast: string; line: 
   const toast = `${count} non-essential ${noun} that asked to bloat your system prompt ${one ? 'is' : 'are'} now name-only.`
   const line = [
     `less-bloat made ${count} ${noun} name-only: ${names}.`,
-    one ? 'Claude Code would put its full description in every system prompt; Claude now fetches it only when it uses the tool.'
-      : 'Claude Code would put their full descriptions in every system prompt; Claude now fetches each only when it uses that tool.',
+    one ? 'Claude Code would describe it up-front, in every system prompt; Claude now fetches its description only when it uses the tool.'
+      : 'Claude Code would describe them up-front, in every system prompt; Claude now fetches each description only when it uses that tool.',
   ].join(' ')
   return { toast, line }
 }
