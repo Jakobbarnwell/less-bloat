@@ -4,22 +4,15 @@ import type { Pane } from '../types'
 
 type Shown = NonNullable<Pane>
 
-// A row of the settings pane: a tool, or an MCP server's tools together, a note on it, whether the
-// draft has it in full, which the pane calls described up-front, and whether that's not where
-// default mode puts it.
 export type Row = { key: string; label: string; tools: string[]; note: string; inFull: boolean; changed: boolean }
 
-// The tools besides default mode's whose place is a choice: the ones Claude Code would put in full,
-// which default mode makes name-only, and any other the saved custom mode keeps in full. Taken as
-// the pane opens, so a row unchecked and saved stays to check again.
+// Besides default mode's, the tools that asked for their full description, and saved picks. Taken
+// as the pane opens, so an unchecked row stays to check again.
 export function choices(tools: string[], asked: string[], saved: List): string[] {
   return tools.filter(n => !RECOMMENDED[n] && !REQUIRED.includes(n) && (asked.includes(n) || saved.includes(n)))
 }
 
-// The rows, in two groups by where the draft puts them: described up-front, then name-only. Listed
-// are the tools default mode keeps in full, in RECOMMENDED's order, and the choices, an MCP server's
-// tools in one row, as a server's can be many, unless the draft places them apart. The rest are required, or name-only in Claude Code
-// too, so the pane doesn't list them.
+// The rows, grouped by where the draft puts them.
 export function rows(shown: Shown): { upFront: Row[]; nameOnly: Row[] } {
   const full = loadedInFull(shown.draft)
   const row = (key: string, tools: string[]): Row => {
@@ -44,7 +37,7 @@ export function rows(shown: Shown): { upFront: Row[]; nameOnly: Row[] } {
   return { upFront: [...kept, ...others].filter(r => r.inFull), nameOnly: [...others, ...kept].filter(r => !r.inFull) }
 }
 
-// The draft with these tools put in full, or name-only.
+// The draft, keeping only the tools whose place now differs from default mode's.
 export function place(draft: List, tools: string[], inFull: boolean): List {
   return [...draft.filter(t => !tools.includes(t)), ...tools.filter(t => !RECOMMENDED[t] === inFull)]
 }
@@ -66,12 +59,10 @@ export function elsewhere(shown: Shown): number {
   return shown.draft.filter(t => !shown.tools.includes(t)).length
 }
 
-// A count of tools, as "1 tool" or "3 tools".
 export function toolCount(n: number): string {
   return `${n} ${n === 1 ? 'tool' : 'tools'}`
 }
 
-// An MCP tool as `server: tool`.
 function label(name: string): string {
   const [, server, tool] = name.match(/^mcp__(.+?)__(.+)$/) ?? []
   return server && tool ? `${server}: ${tool}` : name

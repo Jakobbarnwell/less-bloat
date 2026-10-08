@@ -9,30 +9,20 @@ import { firstSentence, fromSaved, isNames, loadedInFull, same, toSaved } from '
 import type { List } from './tools'
 import type { Pane } from '../types'
 
-// Each conversation's state is kept by its session id, which /clear and a resume change, and a
-// reload of the mod keeps: the tools deferred as its first prompt went out, and each tool's
-// placement, whether it asked for its full description and its first sentence, values of their own
-// under `<session id>:<tool>`.
+// State is kept per conversation, by session id, which /clear and a resume change.
 
-// The engine names the deferred tools as the first prompt goes out, from the tools described by
-// then, and describes the rest only as it sends the request. This note names those.
+// The engine names the deferred tools described by the first prompt; this note names the rest.
 const NOTE = 'Also deferred behind ToolSearch; load with "select:<name>": '
 const SENTENCES = 'Some name-only tools of the main conversation, by the first sentence of their description:'
 
-// Tools wait behind ToolSearch, all but the ones loaded in full: the model sees a tool's name and
-// loads its schema when it needs it.
 export const register: Register = on => {
-  // The describing that follows a /clear or a resume, which the next prompt waits for, so the note
-  // names every tool the engine doesn't.
+  // The describing after /clear or a resume, which the next prompt waits for.
   let redescribed: Promise<unknown> = Promise.resolve()
-  // Custom mode's list, read once per conversation, so a save applies from the next one. The engine
-  // waits on tool.describe, so a store read for each tool would slow it.
+  // Custom mode's list, read once per conversation, so a save applies from the next one.
   let listed: Promise<List> | undefined
 
-  // A tool keeps its first placement for the whole conversation, whatever is saved later,
-  // so the tools sent stay the same and the prompt cache holds. One that appears after the first
-  // prompt, such as a slow MCP server's, wasn't named then, so it keeps the engine's placement,
-  // which the engine names itself, unless the mode keeps it in full.
+  // A tool keeps its first placement all conversation, so the prompt cache holds. One that arrives
+  // after the first prompt keeps the engine's placement, unless the mode keeps it in full.
   on('tool.describe', async ($, e, next) => {
     const result = await next(e)
     const list = await (listed ??= saved($))
@@ -61,9 +51,7 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    // This wait counts against the hook's time, so it ends well within it: a note that names more
-    // than it must beats none. Past the hook's time, or interrupted, the prompt went out without
-    // the note, so it must not be marked as the first.
+    // Well within the hook's time. An interrupted prompt went out without the note, so isn't the first.
     await Promise.race([redescribed, $.clock.sleep(5_000, { signal: next.signal })]).catch(() => {})
     if (next.signal.aborted) return next(e)
     const named = { plugin: 'less-bloat', key: 'named', id: await $.session.id() } as const
@@ -72,18 +60,15 @@ export const register: Register = on => {
     const loaded = loadedInFull(await (listed ??= saved($)))
     const deferred = tools.filter(n => !loaded.has(n))
     const { version } = await $.state.set(named, deferred)
-    // Without ToolSearch the engine loads every tool in full, whatever the mod says.
     const placed = await placements($, tools)
     const unnamed = tools.includes('ToolSearch') ? deferred.filter(n => !(n in placed)) : []
     const result = await next(unnamed.length ? { ...e, context: [...(e.context ?? []), NOTE + unnamed.join(', ')] } : e)
-    // A blocked prompt sent nothing, so the next one is still the first, unless another prompt
-    // has gone out since.
+    // A blocked prompt sent nothing, so the next one is still the first, unless another went out since.
     if (result.drop !== undefined) await $.state.set(named, null, { ifVersion: version })
     return result
   })
 
-  // /clear and an in-session resume start a conversation without a session.start. The engine forgets
-  // its tool descriptions just after this hook, so describing them again waits a moment.
+  // /clear and a resume start a conversation without session.start; the engine forgets its tools just after.
   on('session.end', async ($, e, next) => {
     const restarts = e.reason === 'clear' || e.reason === 'resume'
     if (restarts) listed = undefined
@@ -101,11 +86,8 @@ export const register: Register = on => {
     return result
   })
 
-  // Claude Code lists each deferred tool by name only. One that asked for its full description and
-  // got its name only also gets its first sentence, in a block of the first message's context, so
-  // Claude knows what it's for. The engine's list itself is left as it is: it reads its own text.
-  // Subagents get the same blocks, hence "of the main conversation". Without ToolSearch every tool
-  // is in full.
+  // A name-only tool that asked for its full description gets its first sentence in the first
+  // message's context, so Claude knows what it's for. Subagents get the same blocks.
   on('prompt.context', async ($, e, next) => {
     const result = await next(e)
     const session = await $.session.id()
@@ -117,17 +99,13 @@ export const register: Register = on => {
     return { ...result, blocks: [...result.blocks, { name: 'nameOnlyTools', text: [SENTENCES, ...lines].join('\n') }] }
   })
 
-  // /less-bloat opens the settings pane. A run with nowhere to draw it, such as `claude -p`, or
-  // without ToolSearch, gets this conversation's list as text.
+  // /less-bloat opens the pane, or prints the list where it can't be drawn.
   on('command.run', { command: COMMAND.name }, async $ => {
     if (!(await $.session.surfaces()).length) return { text: `${await listing($)}\n\n${CHANGE}` }
     return (await open($, await saved($))) ? {} : { text: await listing($) }
   })
 
-  // The settings pane /less-bloat opens: each tool whose place is a choice, under where it is now,
-  // described up-front (checked) or name-only, each with where default mode and Claude Code put it;
-  // toggled to change it from default mode, saved as custom mode's list. It draws from what open()
-  // took in, so drawing reads nothing else.
+  // The pane: the tools whose place is a choice, grouped by where the draft puts them.
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const { value: shown } = await $.state.get(PANE)
@@ -136,18 +114,15 @@ export const register: Register = on => {
     const unlistedCount = unlisted(shown)
     const absent = elsewhere(shown)
     const { upFront, nameOnly } = rows(shown)
-    // A line of the legend, wrapped clear of its bullet.
     const bullet = (text: string) => (
       <Box flexDirection="row"><Text dimColor>• </Text><Text dimColor>{text}</Text></Box>
     )
     const marks = isTerminal ? { full: '[x]', nameOnly: '[ ]' } : { full: '☑', nameOnly: '☐' }
-    // A group of rows under its heading; nothing for none. The first row of the pane takes the keyboard.
     const group = (heading: string, hint: string, list: Row[]) => list.length ? (
       <Box flexDirection="column" marginTop={1}>
         <Text bold>{heading} ({list.reduce((n, r) => n + r.tools.length, 0)})<Text dimColor> {hint}</Text></Text>
         {list.map(row => (
-          // The note goes under the name where the two don't fit on one line. A Button's label takes no
-          // color, so the name, orange where it's changed, sits beside the mark, which is the button.
+          // A Button's label takes no color, so the name sits beside the mark.
           <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
             <Box flexDirection="row" columnGap={1} flexShrink={0}>
               <Button key={row.key} plain autoFocus={row.key === (upFront[0] ?? nameOnly[0])?.key || undefined} onPress={() => redraft($, draft => place(draft, row.tools, !row.inFull))}>
@@ -173,11 +148,10 @@ export const register: Register = on => {
           <Button key="save" variant="primary" hotkey="s" onPress={() => save($)}>Save</Button>
           <Button key="default" hotkey="d" onPress={() => redraft($, () => [])}>Back to default</Button>
         </Box>
-        {/* The terminal's keys, as Claude Code's own menus list theirs; a desktop is clicked. */}
         {isTerminal ? <Text dimColor>↑/↓ move · Enter select · s save · d default · Esc close</Text> : null}
         <Box flexDirection="column" marginTop={1}>
           {bullet('See the less-bloat default and Claude Code default for each tool. If you\'ve changed a tool from the less-bloat default, it\'s orange.')}
-          {bullet('See github.com/jakobbarnwell/less-bloat for what each tool does, or ask Claude.')}
+          {bullet('Wondering what a tool does? Ask Claude.')}
           {absent ? bullet(`Custom mode also changes ${toolCount(absent)} that this conversation doesn't have.`) : null}
           {bullet(shown.status || 'A saved change applies from your next conversation.')}
         </Box>
@@ -193,8 +167,7 @@ export const register: Register = on => {
     )
   })
 
-  // Where the keyboard is in the pane, for the arrows. Kept apart from the pane's state, so a move
-  // doesn't redraw it.
+  // Where the keyboard is, kept apart from the pane's state so a move doesn't redraw it.
   on('ui.focus', { component: 'Pane', requestId: PANE_ID }, async ($, e, next) => {
     const result = await next(e)
     const { value: shown } = await $.state.get(PANE)
@@ -202,17 +175,15 @@ export const register: Register = on => {
     return result
   })
 
-  // In the terminal, up and down move the keyboard a button at a time, as in Claude Code's own menus,
-  // where the engine would scroll the pane a row (or more, summed while this hook ran); the move
-  // scrolls it into view. The wheel and the page keys scroll, and a desktop scrolls as it does.
-  // The event doesn't say which surface sent it, so a session with none but the terminal's is one.
+  // ↑/↓ move a button at a time, as in Claude Code's menus; the wheel and page keys still scroll.
+  // The event doesn't name its surface, so only a terminal-only session gets this.
   on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, async ($, e, next) => {
     const { value: shown } = await $.state.get(PANE)
     if (!shown || e.origin.kind !== 'person' || e.pointer || Math.abs(e.by) >= e.bodyRows) return next(e)
     if ((await $.session.surfaces()).some(surface => surface !== 'terminal')) return next(e)
     const { value: ring } = await $.state.get(RING)
     const keys = buttons(shown)
-    // From none of the buttons, as from the close mark, an arrow goes to Save.
+    // From none of the buttons, an arrow goes to Save.
     const at = keys.indexOf(ring ?? '')
     const key = keys[Math.min(Math.max(at + e.by, 0), keys.length - 1)]!
     // Past the first or last button, the engine scrolls to what is above or below it.
@@ -222,8 +193,6 @@ export const register: Register = on => {
     return {}
   })
 
-  // The setup tool, as SETUP names it. A save applies from the next conversation: a new session or
-  // /clear.
   on('tool.call', { tool: 'mcp__less-bloat__setup' }, async ($, e) => {
     const input = e as Input
     const given = input.nameOnly || input.upFront
@@ -237,8 +206,7 @@ export const register: Register = on => {
     if (!isNames(nameOnly) || !isNames(full)) return { result: 'Not saved: nameOnly and upFront must be lists of tool names.' }
     const tools = (await $.tool.list()).map(t => t.name)
     const before = await saved($)
-    // Saved without the entries that change nothing. Custom mode with none left, as from a typo,
-    // would be default mode, so it saves nothing.
+    // Custom mode that changes nothing, as from a typo, saves nothing.
     const kept = changes(tools, before, nameOnly, full)
     if (input.mode === 'custom' && !kept.length) {
       return { result: [`Not saved: this changes nothing from default mode. To go back to default, pass mode "default".`, ...warnings(tools, before, nameOnly, full)].join(' ') }
@@ -250,24 +218,20 @@ export const register: Register = on => {
   })
 }
 
-// This conversation's tools as they are placed, as the setup tool and /less-bloat show them.
 async function listing($: EngineInterface): Promise<string> {
   const tools = (await $.tool.list()).map(t => t.name)
   const placed = tools.includes('ToolSearch') ? await placements($, tools) : null
   return report(tools, placed, await saved($), [...await $.session.surfaces()], await askers($, tools))
 }
 
-// Counting the context, as /context does, describes part of the tools connected now, so the engine
-// names those itself and the note stays short. An interactive session computes the first message's
-// context as it starts, before any tool is described, so describing asks for it again, with the
-// sentences of the tools described by now. Not once the first prompt has gone out: changing that
-// message would spend the prompt cache.
+// Counting the context makes the engine describe the tools connected now. Until the first prompt
+// goes out, the first message's context is computed again, with their sentences; after, that would
+// spend the prompt cache.
 async function describe($: EngineInterface) {
   await $.session.usage({ breakdown: 'summary' })
   if (!(await read($, { plugin: 'less-bloat', key: 'named', id: await $.session.id() }))) $.ui.invalidate('prompt.context')
 }
 
-// This conversation's placement of each of these tools that has been described.
 async function placements($: EngineInterface, tools: string[]): Promise<Record<string, boolean>> {
   const session = await $.session.id()
   const placed = await Promise.all(tools.map(async tool =>
@@ -282,8 +246,7 @@ async function askers($: EngineInterface, tools: string[]): Promise<string[]> {
   return tools.filter((_, i) => asked[i])
 }
 
-// Tools that asked for their full description and got their name only, told a moment after the
-// first of a batch is described.
+// Tools that asked for their full description and got their name only, told in batches.
 const untold = new Set<string>()
 let pending = false
 function tell($: EngineInterface, tool: string) {
@@ -302,14 +265,10 @@ function announce($: EngineInterface) {
   announcing = announcing.then(() => show($)).catch(() => {})
 }
 
-// The conversation whose toast was the first less-bloat showed, as its tools described later
-// aren't new either.
+// The conversation of the first toast, whose later tools aren't new either.
 let opening: string | undefined
 
-// Shows the tools that asked for their full description and got their name only, once each ever,
-// in a toast and a transcript line, which the model never sees. Without ToolSearch every tool goes
-// in full, so none did. A run with nothing to draw on, such as `claude -p`, shows nothing, so they
-// wait for a surface, as they do when the store can't be read.
+// A toast and a transcript line, once per tool ever. With nowhere to draw, as in `claude -p`, they wait.
 async function show($: EngineInterface) {
   if (!(await $.session.surfaces()).length) return
   if (!(await $.tool.list()).some(t => t.name === 'ToolSearch')) return untold.clear()
@@ -325,39 +284,33 @@ async function show($: EngineInterface) {
   await $.store.set('announced', [...told ?? [], ...fresh])
 }
 
-// The tools announce has shown, in the mod's store; none means it has shown nothing yet. A store
-// that can't be read rejects, so announce never writes over what it couldn't read.
+// The tools already shown. A store that can't be read rejects, so nothing is written over.
 async function announced($: EngineInterface): Promise<string[] | undefined> {
   const told = await $.store.get('announced')
   return isNames(told) ? told : undefined
 }
 
-// Custom mode's list, in the mod's store, which every session reads, without required tools. None
-// saved or one that can't be read is default mode's, the empty list.
+// Custom mode's list. None saved, or unreadable, is default mode's empty list.
 async function saved($: EngineInterface): Promise<List> {
   return fromSaved(await $.store.get('list').catch(() => undefined))
 }
 
-// The settings pane's id, what it draws, and where the keyboard is in it.
 const PANE_ID = 'less-bloat'
 const PANE = { plugin: 'less-bloat', key: 'pane' } as const
 const RING = { plugin: 'less-bloat', key: 'ring' } as const
 
-// Opens the pane on this conversation's tools and the saved list. Says whether it is drawn: not
-// without ToolSearch, as then every tool is in full whatever the list.
+// Opens the pane, and says whether it's drawn: not without ToolSearch, as then every tool is in full.
 async function open($: EngineInterface, list: List): Promise<boolean> {
   const tools = (await $.tool.list()).map(t => t.name)
   if (!tools.includes('ToolSearch')) return false
   const asked = await askers($, tools)
   await $.state.set(PANE, { tools, asked, choices: choices(tools, asked, list), saved: list, draft: list, status: '' })
-  // A new pane is on none of its buttons until the first row takes the keyboard, and one with no
-  // rows has none; a pane already up keeps where its keyboard is.
+  // A pane already up keeps where its keyboard is.
   if (!(await $.ui.panes()).some(pane => pane.id === PANE_ID)) await $.state.set(RING, '')
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 
-// Saves the pane's list, whose entries all change something; an empty one is default mode, saved
-// as no list.
+// An empty list is default mode, saved as no list.
 async function save($: EngineInterface) {
   const { value: shown } = await $.state.get(PANE)
   if (!shown) return
@@ -373,12 +326,10 @@ async function save($: EngineInterface) {
   await edit($, p => ({ ...p, saved: shown.draft, status: same(p.draft, shown.draft) ? status : p.status }))
 }
 
-// Changes the pane's list.
 function redraft($: EngineInterface, change: (draft: List) => List) {
   return edit($, p => ({ ...p, draft: change(p.draft), status: '' }))
 }
 
-// Changes what the pane shows.
 function edit($: EngineInterface, change: (shown: NonNullable<Pane>) => NonNullable<Pane>) {
   return update($, PANE, p => (p ? change(p) : null))
 }
