@@ -4,6 +4,8 @@
 
 A lightweight Claude mod that strips the bloat from the system prompt **without** turning any tools off. 
 
+https://github.com/user-attachments/assets/e0ed18dc-094a-4a0f-8dd7-193e5b086e23
+
 One install -> ~50% less tokens in your system prompt
 
 | Tokens to start a session | Without | With `less-bloat` | Savings (%) |
@@ -11,8 +13,8 @@ One install -> ~50% less tokens in your system prompt
 | CLI, out-of-the-box | 31,728 | 14,153 | 55.4% |
 | Desktop app, out-of-the-box | 63,712 | 33,983 | 46.7% |
 
-Measured from the API's usage report: the CLI on Claude Code 2.1.289, the desktop app on one setup
-with 2.1.286. Yours depend on your version and what you have connected.
+Measured from real runs' API's usage report: the CLI on Claude Code 2.1.289, the desktop app on one setup
+with 2.1.286. Your numbers depend slightly on your version, what tools you've already disabled, and how many MCPs you have connected.
 
 Want to see it work? Ask Claude:
 
