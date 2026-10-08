@@ -180,8 +180,8 @@ Skills add bloat too: every installed skill (with model invocation enabled) has 
 <summary>Will I know what it changed?</summary>
 
 Your first session shows a toast with how many tools `less-bloat`
-made name-only that Claude Code would describe up-front, and a line in the transcript saying where
-they're from. After that, you get one only for a new tool, such as a newly added MCP server's, once.
+made name-only that Claude Code would describe up-front, and a line in the transcript pointing to
+`/less-bloat`. After that, you get one only for a new tool, such as a newly added MCP server's, once.
 
 </details>
 <details>

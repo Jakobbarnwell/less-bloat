@@ -106,8 +106,9 @@ function section(heading: string, tools: string[]): string[] {
   return tools.length ? [heading, ...lines, ...[...servers].map(([server, names]) => `- ${server}*: ${names.join(', ')}`)] : []
 }
 
-// The notice for tools that asked for their full description and got their name only.
-export function notice(tools: string[], first: boolean): { toast: string; line: string } {
+// The notice for tools that asked for their full description and got their name only. The first
+// notice ever, given the mode, says only how many.
+export function notice(tools: string[], first: boolean, mode?: 'default' | 'custom'): { toast: string; line: string } {
   const servers = new Map<string, number>()
   const own: string[] = []
   for (const n of tools) {
@@ -130,7 +131,7 @@ export function notice(tools: string[], first: boolean): { toast: string; line: 
   const count = `${tools.length}${first ? '' : ' new'}`
   const noun = one ? 'tool' : 'tools'
   const toast = `${count} non-essential ${noun} that asked to bloat your system prompt ${one ? 'is' : 'are'} now name-only.`
-  const line = [
+  const line = mode ? `less-bloat applied ${mode === 'default' ? 'its default' : 'your custom'} settings and made ${count} ${noun} name-only. Run /less-bloat to see or change them.` : [
     `less-bloat made ${count} ${noun} name-only: ${names}.`,
     one ? 'Claude Code would describe it up-front, in every system prompt; Claude now fetches its description only when it uses the tool.'
       : 'Claude Code would describe them up-front, in every system prompt; Claude now fetches each description only when it uses that tool.',

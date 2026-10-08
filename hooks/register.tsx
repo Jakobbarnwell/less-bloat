@@ -320,7 +320,8 @@ async function show($: EngineInterface) {
   if (!fresh.length) return
   const session = await $.session.id()
   if (!told) opening = session
-  const { toast, line } = notice(fresh, opening === session)
+  const mode = told ? undefined : (await saved($)).length ? 'custom' : 'default'
+  const { toast, line } = notice(fresh, opening === session, mode)
   $.ui.toast(toast, { timeoutMs: 15_000 })
   $.ui.log(line)
   await $.store.set('announced', [...told ?? [], ...fresh])
