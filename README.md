@@ -4,7 +4,7 @@
 
 A lightweight Claude mod that strips the bloat from the system prompt **without** turning any tools off. 
 
-https://github.com/user-attachments/assets/e0ed18dc-094a-4a0f-8dd7-193e5b086e23
+https://github.com/user-attachments/assets/8f208519-bcc7-4304-923c-7749dfe1b6ac
 
 One install -> ~50% less tokens in your system prompt
 
