@@ -52,10 +52,10 @@ claude plugin uninstall less-bloat@less-bloat
 
 Claude works less well as context fills up. 
 
-1. Claude Code describes some tools up-front in the system prompt: their name, description and schema are part of every session's
-   system prompt, **whether you normally use these tools or not.**
-2. Normally tools are only mentioned by name in the system prompt. This is by design: when
+1. Most tools are name-only: the system prompt mentions only their name. This is by design: when
    Claude wants to use one, **it fetches the full description with ToolSearch.**
+2. But Claude Code describes some tools up-front: their name, description and schema are part of
+   every session's system prompt, **whether you normally use these tools or not.**
 3. **`less-bloat` simply takes most tools that are described up-front and makes them name-only too.** They still work. Claude reaches for their description when needed.
 
 If `less-bloat` moves a tool's full description out of the system prompt, it retains a small hint: **this ensures Claude still knows what the tool does** and when to fetch its description.
@@ -66,7 +66,7 @@ If `less-bloat` moves a tool's full description out of the system prompt, it ret
   Code has them, Agent, Skill, AskUserQuestion and SendUserFile, plus the desktop app's chapter,
   side-task and widget tools when you're in the app, and a project thread's reply tools.
   
-**Custom** is your own picks. Run `/less-bloat` to open settings. Check a tool you want `less-bloat` not to move to name-only and keep it described up-front, or select further tools you don't want described up-front in the system prompt.
+**Custom** is your own picks. Run `/less-bloat` to open settings: check a tool to describe it up-front, or uncheck one to make it name-only.
 
 - **In doubt?** Ask Claude to set things up based on your session history.
 - **Wondering what a tool does?** Ask Claude.
@@ -106,7 +106,7 @@ ToolSearch is always described up-front, since Claude fetches all the others wit
 <details>
 <summary>Is it safe?</summary>
 
-A mod can read and write files, run commands and go online as you, so check what you
+A plugin can read and write files, run commands and go online as you, so check what you
 install. `less-bloat` is about 600 lines of TypeScript in `hooks/`, and does none of these.
 (`scripts/check.py` is a test you run yourself; the plugin never runs it.) It keeps your choices,
 and which tools it has told you about, in Claude Code's own plugin store.

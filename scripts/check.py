@@ -6,10 +6,11 @@ an MCP server that asks to stay loaded, with as many tools as the desktop app ha
   1. two prompts in one process, then /clear and a third,
   2. a resume of the first conversation with a third prompt, a compaction, and a fourth prompt,
   3. a conversation that saves custom mode through the setup tool, as Claude does, then /clear,
-     a prompt and /less-bloat: it makes Write and Skill name-only and keeps the probe's ping, which
-     asked to stay loaded, and WebFetch, which the engine defers itself, in full; none of
-     ToolSearch, which is required, NotebookEdit, which is name-only already, Bash, which is in
-     full already, Edit, which is in both lists, and a name of no tool goes on the list,
+     a prompt and /less-bloat. The save asks for:
+       name-only: Write, Skill (saved); ToolSearch (required), NotebookEdit (name-only already),
+                  Edit (in both lists)
+       up-front:  mcp__probe__ping, WebFetch (saved); Bash (up-front already), Edit,
+                  mcp__probe__nope (no such tool)
   4. a new conversation, which is in custom mode,
   5. a resume of that one-prompt conversation, with a second prompt,
   6. an interactive session, typed into through a terminal, whose server connects after its first
@@ -19,7 +20,7 @@ It checks that:
     engine's notices or the mod's note name every other tool, from the first request on; ToolSearch, being required,
     stays; default mode loads Bash, Read, Edit, Write, Agent and Skill;
   - every request gives a tool that asked to stay loaded and got its name only its first sentence,
-    and none to one the engine defers itself or one in full;
+    and none to one the engine defers itself;
   - later prompts in a process, and a resume, send the same tools and system prompt, and a resume
     after two prompts the same conversation;
   - no step records a tool as announced, as a -p run has nowhere to show the notice;
@@ -65,12 +66,12 @@ NOTE = 'Also deferred behind ToolSearch; load with "select:<name>": '
 
 
 def default_lists():
-    """The tools default mode keeps loaded in full: REQUIRED and RECOMMENDED, read from the mod's source."""
+    """The tools default mode keeps loaded in full: REQUIRED and DEFAULT_UP_FRONT, read from the mod's source."""
     with open(f'{PLUGIN}/hooks/tools.ts') as f:
         source = f.read()
     required = re.findall(r"'([\w-]+)'", re.search(r'REQUIRED = \[(.*?)\]', source)[1])
-    recommended = re.findall(r"^  '?([\w-]+)'?:", re.search(r'RECOMMENDED.*?\{(.*?)^\}', source, re.S | re.M)[1], re.M)
-    return set(required), set(recommended)
+    up_front = re.findall(r"^  '?([\w-]+)'?:", re.search(r'DEFAULT_UP_FRONT.*?\{(.*?)^\}', source, re.S | re.M)[1], re.M)
+    return set(required), set(up_front)
 
 
 # The tools default mode must keep loaded, of those a -p run has (AskUserQuestion it hasn't).
@@ -79,9 +80,7 @@ CORE = {'Bash', 'Read', 'Edit', 'Write', 'Agent', 'Skill'}
 # Tools the engine itself defers, so the mod adds no sentence to their names.
 ENGINE_DEFERRED = {'WebFetch', 'WebSearch', 'NotebookEdit'}
 
-# Custom mode's lists, as the setup is asked to save them, and as they are saved:
-# ToolSearch is required, NotebookEdit name-only already, Bash in full already, Edit in both lists
-# and nope no tool, so none takes.
+# Custom mode's lists, as the setup is asked to save them (see step 3 above), and as they are saved.
 NAME_ONLY = ['Write', 'Skill', 'ToolSearch', 'NotebookEdit', 'Edit']
 FULL = ['mcp__probe__ping', 'WebFetch', 'Bash', 'Edit', 'mcp__probe__nope']
 SAVED = {'nameOnly': ['Write', 'Skill'], 'full': ['mcp__probe__ping', 'WebFetch']}
@@ -336,8 +335,8 @@ def uncached(value, markers=False):
 
 def main():
     cli = sys.argv[1] if len(sys.argv) > 1 else 'claude'
-    required, recommended = default_lists()
-    default = required | recommended
+    required, up_front = default_lists()
+    default = required | up_front
     custom = (default - set(SAVED['nameOnly'])) | set(SAVED['full'])
     exchanges, steps = [], []
     failures = []
@@ -443,7 +442,7 @@ def main():
                 expected = expect.get(name)
                 if sentences.get(name) != expected:
                     failures.append(f'{where} gives {name} the sentence {sentences.get(name)!r}, not {expected!r}')
-            # Typed apart from the mod's source, so a name misspelt there, or renamed by the engine, fails.
+            # CORE is written out here, not read from tools.ts, so a name misspelt there, or renamed by the engine, fails.
             if keep == default and CORE - loaded:
                 failures.append(f'{where} does not load {sorted(CORE - loaded)} in full')
 

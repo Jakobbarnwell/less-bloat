@@ -5,48 +5,55 @@ import { buttons, choices, elsewhere, place, rows, toolCount, unlisted } from '.
 import type { Row } from './pane'
 import { CHANGE, changes, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
-import { firstSentence, fromSaved, isNames, loadedInFull, REQUIRED, same, toSaved } from './tools'
-import type { List } from './tools'
-import type { Pane } from '../types'
+import { firstSentence, fromSaved, isNames, upFrontTools, REQUIRED, same, toSaved } from './tools'
+import type { List, Pane } from '../types'
 
-// State is kept per conversation, by session id, which /clear and a resume change.
+// Terms (up-front, name-only, placement, asked, late, list) are defined at the top of tools.ts.
 
 // The engine names the deferred tools described by the first prompt; this note names the rest.
 const NOTE = 'Also deferred behind ToolSearch; load with "select:<name>": '
 
+const PANE_ID = 'less-bloat'
+const PANE = { plugin: 'less-bloat', key: 'pane' } as const
+const FOCUS = { plugin: 'less-bloat', key: 'focus' } as const
+
 export const register: Register = on => {
-  // The describing after /clear or a resume, which the next prompt waits for.
-  let redescribed: Promise<unknown> = Promise.resolve()
+  // Settles once the tools are described again after /clear or a resume; the next prompt waits for it.
+  let redescribing: Promise<unknown> = Promise.resolve()
   // Custom mode's list, read once per conversation, so a save applies from the next one.
   let listed: Promise<List> | undefined
   // After /clear or a resume, each tool's placement, settled once the engine has described it again.
   let placing = new Map<string, { settled: Promise<void>; settle: () => void }>()
 
-  // A tool keeps its first placement all conversation, so the prompt cache holds. One the main loop
-  // gets after the first prompt, but a required one, is deferred: the engine then adds it in a
-  // message instead of to the tools sent, in full if it would describe it up-front, else by name.
+  // A tool keeps its first placement for the whole conversation, so the prompt cache holds. A tool
+  // that connects after the first prompt (other than a required one) is deferred, so the tools sent
+  // stay the same; the engine then adds it in a message, with its full description if it would
+  // describe it up-front, else by name.
   on('tool.describe', async ($, e, next) => {
     const result = await next(e)
     const list = await (listed ??= saved($))
     const session = await $.session.id()
-    const named = await read($, { plugin: 'less-bloat', key: 'named', id: session })
+    const firstPromptTools = await read($, { plugin: 'less-bloat', key: 'firstPromptTools', id: session })
     // The engine's own placement, which an MCP server's alwaysLoad sets.
     const asked = !(result.isDeferred ?? e.isDeferred ?? false)
-    const kept = loadedInFull(list)
-    const late = Boolean(named && !named.includes(e.tool) && !REQUIRED.includes(e.tool)
+    const upFront = upFrontTools(list)
+    const late = Boolean(firstPromptTools && !firstPromptTools.includes(e.tool) && !REQUIRED.includes(e.tool)
       && (await $.tool.list()).some(t => t.name === e.tool))
-    const isDeferred = late || !kept.has(e.tool)
     const id = `${session}:${e.tool}`
-    const [placed, wasAsked] = await Promise.all([
-      update($, { plugin: 'less-bloat', key: 'deferred', id }, first => first ?? isDeferred),
+    const [deferred, wasAsked] = await Promise.all([
+      update($, { plugin: 'less-bloat', key: 'deferred', id }, first => first ?? (late || !upFront.has(e.tool))),
       update($, { plugin: 'less-bloat', key: 'asked', id }, first => first ?? asked),
     ])
-    // A late tool gets none: one that asked for its full description is added with it.
-    await update($, { plugin: 'less-bloat', key: 'sentence', id }, first => first ?? (wasAsked && placed && !late ? firstSentence(result.description) : ''))
-    // One that is late, so added in full, or that the user made name-only or keeps in full, needs no telling.
-    if (wasAsked && placed && !late && !list.includes(e.tool) && !kept.has(e.tool)) tell($, e.tool)
+    // Claude Code would put it up-front, but less-bloat made it name-only. Not so for a late tool: the
+    // engine adds that in a message with its full description.
+    const madeNameOnly = wasAsked && deferred && !late
+    const sentence = madeNameOnly ? firstSentence(result.description) : ''
+    await update($, { plugin: 'less-bloat', key: 'sentence', id }, first => first ?? sentence)
+    // A tool the user placed themselves needs no telling. (The saved list is read again after a reload
+    // of the plugin, so it can be newer than the recorded placement.)
+    if (madeNameOnly && !list.includes(e.tool) && !upFront.has(e.tool)) tell($, e.tool)
     placing.get(e.tool)?.settle()
-    return { ...result, isDeferred: placed }
+    return { ...result, isDeferred: deferred }
   })
 
   on('session.start', async ($, e, next) => {
@@ -58,42 +65,47 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    // Well within the hook's time. An interrupted prompt went out without the note, so isn't the first.
-    await Promise.race([redescribed, $.clock.sleep(5_000, { signal: next.signal })]).catch(() => {})
+    // Wait at most 5 s, well inside the hook's time limit. If the user interrupts meanwhile, pass the
+    // prompt through and record nothing.
+    await Promise.race([redescribing, $.clock.sleep(5_000, { signal: next.signal })]).catch(() => {})
     if (next.signal.aborted) return next(e)
-    const named = { plugin: 'less-bloat', key: 'named', id: await $.session.id() } as const
-    if (await read($, named)) return next(e)
+    const firstPromptTools = { plugin: 'less-bloat', key: 'firstPromptTools', id: await $.session.id() } as const
+    if (await read($, firstPromptTools)) return next(e)
     const tools = (await $.tool.list()).map(t => t.name)
-    const loaded = loadedInFull(await (listed ??= saved($)))
-    const deferred = tools.filter(n => !loaded.has(n))
-    const { version } = await $.state.set(named, tools)
-    const placed = await placements($, tools)
-    const unnamed = tools.includes('ToolSearch') ? deferred.filter(n => !(n in placed)) : []
+    const upFront = upFrontTools(await (listed ??= saved($)))
+    const nameOnly = tools.filter(n => !upFront.has(n))
+    const { version } = await $.state.set(firstPromptTools, tools)
+    const described = await deferrals($, tools)
+    const unnamed = tools.includes('ToolSearch') ? nameOnly.filter(n => !(n in described)) : []
     const result = await next(unnamed.length ? { ...e, context: [...(e.context ?? []), NOTE + unnamed.join(', ')] } : e)
     // A blocked prompt sent nothing, so the next one is still the first, unless another went out since.
-    if (result.drop !== undefined) await $.state.set(named, null, { ifVersion: version })
+    if (result.drop !== undefined) await $.state.set(firstPromptTools, null, { ifVersion: version })
     return result
   })
 
-  // /clear and a resume start a conversation without session.start; the engine forgets its tools just after.
+  // After /clear or a resume, the engine forgets every tool's placement, and no session.start fires:
+  // 1. here, on the next tick, describe() makes the engine describe every tool again (tool.describe);
+  // 2. each tool.describe settles that tool's entry in `placing`;
+  // 3. prompt.context waits (up to 5 s) for all of them, so the first prompt's name-only list is complete;
+  // 4. prompt.submit waits (up to 5 s) for describe() itself, so its note sees the new placements.
   on('session.end', async ($, e, next) => {
     const restarts = e.reason === 'clear' || e.reason === 'resume'
     if (restarts) listed = undefined
     const result = await next(e)
     if (restarts) {
       placing = new Map((await $.tool.list()).map(t => [t.name, settling()]))
-      redescribed = new Promise(done => $.clock.after(0, () => describe($).then(done, done)))
+      redescribing = new Promise(done => $.clock.after(0, () => describe($).then(done, done)))
     }
     return result
   })
 
-  // The engine lists the first prompt's name-only tools once this context is computed, from the
-  // placements it has recorded, which /clear and a resume forget: so after one, the context waits for
-  // each tool's.
+  // When this context is computed, the engine builds the first prompt's name-only list from the
+  // placements it has recorded. /clear and a resume forget those, so after one, wait (up to 5 s) until
+  // every tool is described again.
   on('prompt.context', async ($, e, next) => {
     if (!placing.size) return next(e)
-    const placed = Promise.all([...placing.values()].map(p => p.settled))
-    await Promise.race([placed, $.clock.sleep(5_000, { signal: next.signal })]).catch(() => {})
+    const described = Promise.all([...placing.values()].map(p => p.settled))
+    await Promise.race([described, $.clock.sleep(5_000, { signal: next.signal })]).catch(() => {})
     placing.clear()
     return next(e)
   })
@@ -192,7 +204,7 @@ export const register: Register = on => {
   on('ui.focus', { component: 'Pane', requestId: PANE_ID }, async ($, e, next) => {
     const result = await next(e)
     const { value: shown } = await $.state.get(PANE)
-    if (!result.deny && shown) await $.state.set(RING, e.element ?? '')
+    if (!result.deny && shown) await $.state.set(FOCUS, e.element ?? '')
     return result
   })
 
@@ -202,10 +214,10 @@ export const register: Register = on => {
     const { value: shown } = await $.state.get(PANE)
     if (!shown || e.origin.kind !== 'person' || e.pointer || Math.abs(e.by) >= e.bodyRows) return next(e)
     if ((await $.session.surfaces()).some(surface => surface !== 'terminal')) return next(e)
-    const { value: ring } = await $.state.get(RING)
+    const { value: focused } = await $.state.get(FOCUS)
     const keys = buttons(shown)
     // From none of the buttons, an arrow goes to Save.
-    const at = keys.indexOf(ring ?? '')
+    const at = keys.indexOf(focused ?? '')
     const key = keys[Math.min(Math.max(at + e.by, 0), keys.length - 1)]!
     // Past the first or last button, the engine scrolls to what is above or below it.
     if (key === keys[at]) return next(e)
@@ -223,36 +235,36 @@ export const register: Register = on => {
     if (input.mode === 'custom' && !given) return { result: `Not saved: custom mode needs nameOnly or upFront.\n${await listing($)}` }
     if (input.mode === 'default' && (input.nameOnly?.length || input.upFront?.length)) return { result: `Not saved: default mode takes no nameOnly or upFront.\n${await listing($)}` }
     const nameOnly = input.nameOnly ?? []
-    const full = input.upFront ?? []
-    if (!isNames(nameOnly) || !isNames(full)) return { result: 'Not saved: nameOnly and upFront must be lists of tool names.' }
+    const upFront = input.upFront ?? []
+    if (!isNames(nameOnly) || !isNames(upFront)) return { result: 'Not saved: nameOnly and upFront must be lists of tool names.' }
     const tools = (await $.tool.list()).map(t => t.name)
     const before = await saved($)
     // Custom mode that changes nothing, as from a typo, saves nothing.
-    const kept = changes(tools, before, nameOnly, full)
-    if (input.mode === 'custom' && !kept.length) {
-      return { result: [`Not saved: this changes nothing from default mode. To go back to default, pass mode "default".`, ...warnings(tools, before, nameOnly, full)].join(' ') }
+    const list = changes(tools, before, nameOnly, upFront)
+    if (input.mode === 'custom' && !list.length) {
+      return { result: [`Not saved: this changes nothing from default mode. To go back to default, pass mode "default".`, ...warnings(tools, before, nameOnly, upFront)].join(' ') }
     }
-    const isDefault = !kept.length
+    const isDefault = !list.length
     if (isDefault) await $.store.delete('list')
-    else await $.store.set('list', toSaved(kept))
-    return { result: [`Saved ${isDefault ? 'default' : 'custom'} mode. It applies from the next conversation.`, ...warnings(tools, before, nameOnly, full)].join(' ') }
+    else await $.store.set('list', toSaved(list))
+    return { result: [`Saved ${isDefault ? 'default' : 'custom'} mode. It applies from the next conversation.`, ...warnings(tools, before, nameOnly, upFront)].join(' ') }
   })
 }
 
 async function listing($: EngineInterface): Promise<string> {
   const tools = (await $.tool.list()).map(t => t.name)
-  const placed = tools.includes('ToolSearch') ? await placements($, tools) : null
-  const named = await read($, { plugin: 'less-bloat', key: 'named', id: await $.session.id() })
-  const late = named && placed ? tools.filter(n => !named.includes(n) && !REQUIRED.includes(n)) : []
-  return report(tools, placed, await saved($), [...await $.session.surfaces()], await askers($, tools), late)
+  const deferred = tools.includes('ToolSearch') ? await deferrals($, tools) : null
+  const firstPromptTools = await read($, { plugin: 'less-bloat', key: 'firstPromptTools', id: await $.session.id() })
+  const late = firstPromptTools && deferred ? tools.filter(n => !firstPromptTools.includes(n) && !REQUIRED.includes(n)) : []
+  return report({ tools, deferred, list: await saved($), surfaces: [...await $.session.surfaces()], asked: await askers($, tools), late })
 }
 
-// Counting the context makes the engine describe the tools connected now. Until the first prompt
-// goes out, the first message's context, with its list of name-only tools, is computed again with
-// their placements; after, that would spend the prompt cache.
+// Asking for a context count makes the engine describe every connected tool now. Before the first
+// prompt, also recompute the first message's context so its name-only list uses these placements;
+// after it, recomputing would spend the prompt cache.
 async function describe($: EngineInterface) {
   await $.session.usage({ breakdown: 'summary' })
-  if (!(await read($, { plugin: 'less-bloat', key: 'named', id: await $.session.id() }))) $.ui.invalidate('prompt.context')
+  if (!(await read($, { plugin: 'less-bloat', key: 'firstPromptTools', id: await $.session.id() }))) $.ui.invalidate('prompt.context')
 }
 
 function settling() {
@@ -261,11 +273,12 @@ function settling() {
   return { settled, settle }
 }
 
-async function placements($: EngineInterface, tools: string[]): Promise<Record<string, boolean>> {
+// Whether each tool described in this conversation is deferred, by name.
+async function deferrals($: EngineInterface, tools: string[]): Promise<Record<string, boolean>> {
   const session = await $.session.id()
-  const placed = await Promise.all(tools.map(async tool =>
+  const entries = await Promise.all(tools.map(async tool =>
     [tool, await read($, { plugin: 'less-bloat', key: 'deferred', id: `${session}:${tool}` })] as const))
-  return Object.fromEntries(placed.filter((entry): entry is readonly [string, boolean] => entry[1] !== undefined))
+  return Object.fromEntries(entries.filter((entry): entry is readonly [string, boolean] => entry[1] !== undefined))
 }
 
 // The tools that asked this conversation for their full description, which Claude Code would give them.
@@ -294,7 +307,7 @@ function announce($: EngineInterface) {
   announcing = announcing.then(() => show($)).catch(() => {})
 }
 
-// The conversation of the first toast, whose later tools aren't new either.
+// The session that showed the first notice ever. Later notices in that session don't call their tools "new".
 let opening: string | undefined
 
 // A toast and a transcript line, once per tool ever. With nowhere to draw, as in `claude -p`, they wait.
@@ -324,10 +337,6 @@ async function saved($: EngineInterface): Promise<List> {
   return fromSaved(await $.store.get('list').catch(() => undefined))
 }
 
-const PANE_ID = 'less-bloat'
-const PANE = { plugin: 'less-bloat', key: 'pane' } as const
-const RING = { plugin: 'less-bloat', key: 'ring' } as const
-
 // Opens the pane, and says whether it's drawn: not without ToolSearch, as then every tool is in full.
 async function open($: EngineInterface, list: List): Promise<boolean> {
   const tools = (await $.tool.list()).map(t => t.name)
@@ -335,7 +344,7 @@ async function open($: EngineInterface, list: List): Promise<boolean> {
   const asked = await askers($, tools)
   await $.state.set(PANE, { tools, asked, choices: choices(tools, asked, list), saved: list, draft: list, status: '' })
   // A pane already up keeps where its keyboard is.
-  if (!(await $.ui.panes()).some(pane => pane.id === PANE_ID)) await $.state.set(RING, '')
+  if (!(await $.ui.panes()).some(pane => pane.id === PANE_ID)) await $.state.set(FOCUS, '')
   return (await $.ui.open({ id: PANE_ID, title: 'less-bloat', focus: true, closeOnEscape: true, holdToasts: true })).isPlaced
 }
 

@@ -1,5 +1,5 @@
-import { effective, loadedInFull, RECOMMENDED, REQUIRED, toSaved } from './tools'
-import type { List } from './tools'
+import { effective, upFrontTools, DEFAULT_UP_FRONT, REQUIRED, toSaved } from './tools'
+import type { List } from '../types'
 
 // Custom mode through Claude: this tool, which register.tsx answers.
 const NAME = 'setup'
@@ -28,22 +28,22 @@ export type Input = { mode?: 'default' | 'custom'; nameOnly?: string[]; upFront?
 
 export const SETUP = { name: NAME, description: DESCRIPTION, inputSchema: INPUT }
 
-// The list a save makes: entries that change something. A name-only pick may be another app's tool.
-// A tool in both lists is in neither.
-export function changes(tools: string[], before: List, nameOnly: List, full: List): List {
-  const both = (n: string) => nameOnly.includes(n) && full.includes(n)
+// The list a save makes: entries that change something. A name-only pick is kept even if this
+// session lacks it (it may be the desktop app's). A tool named in both lists is dropped.
+export function changes(tools: string[], before: List, nameOnly: List, upFront: List): List {
+  const both = (n: string) => nameOnly.includes(n) && upFront.includes(n)
   const known = (n: string) => tools.includes(n) || before.includes(n)
-  return effective([...nameOnly.filter(n => RECOMMENDED[n]), ...full.filter(n => !RECOMMENDED[n] && known(n))].filter(n => !both(n)))
+  return effective([...nameOnly.filter(n => DEFAULT_UP_FRONT[n]), ...upFront.filter(n => !DEFAULT_UP_FRONT[n] && known(n))].filter(n => !both(n)))
 }
 
 // What a save warns about: tools this session lacks, and each name it doesn't save, and why.
-export function warnings(tools: string[], before: List, nameOnly: List, full: List): string[] {
-  const saved = changes(tools, before, nameOnly, full)
-  const given = [...new Set([...nameOnly, ...full])]
+export function warnings(tools: string[], before: List, nameOnly: List, upFront: List): string[] {
+  const saved = changes(tools, before, nameOnly, upFront)
+  const given = [...new Set([...nameOnly, ...upFront])]
   const required = given.filter(n => REQUIRED.includes(n))
-  const both = given.filter(n => nameOnly.includes(n) && full.includes(n) && !required.includes(n))
+  const both = given.filter(n => nameOnly.includes(n) && upFront.includes(n) && !required.includes(n))
   const left = given.filter(n => !saved.includes(n) && !required.includes(n) && !both.includes(n))
-  const unknown = left.filter(n => !RECOMMENDED[n] && !tools.includes(n))
+  const unknown = left.filter(n => !DEFAULT_UP_FRONT[n] && !tools.includes(n))
   const already = left.filter(n => !unknown.includes(n))
   const absent = saved.filter(n => !tools.includes(n))
   return [
@@ -55,27 +55,30 @@ export function warnings(tools: string[], before: List, nameOnly: List, full: Li
   ].filter(Boolean)
 }
 
-// This conversation's tools as placed, with why each is in full. Without ToolSearch, placed is null
-// and every tool is in full. Late tools arrived after the first prompt.
-export function report(tools: string[], placed: Record<string, boolean> | null, list: List, surfaces: string[], asked: string[], late: string[]): string {
-  const pending = placed ? tools.filter(n => !(n in placed)) : []
-  const full = new Set(tools.filter(n => placed ? placed[n] === false : true))
-  const kept = loadedInFull(list)
+// This conversation's tools as placed, with why each is in full. `deferred` holds each described
+// tool's placement; without ToolSearch it is null and every tool is in full. Late tools arrived after
+// the first prompt.
+export function report({ tools, deferred, list, surfaces, asked, late }: {
+  tools: string[]; deferred: Record<string, boolean> | null; list: List; surfaces: string[]; asked: string[]; late: string[]
+}): string {
+  const unplaced = deferred ? tools.filter(n => !(n in deferred)) : []
+  const full = new Set(tools.filter(n => deferred ? deferred[n] === false : true))
+  const upFront = upFrontTools(list)
   const why = (n: string) =>
     REQUIRED.includes(n) ? 'required'
-      : !placed ? 'ToolSearch is off'
-      : kept.has(n) ? RECOMMENDED[n] ?? 'your pick in custom mode'
+      : !deferred ? 'ToolSearch is off'
+      : upFront.has(n) ? DEFAULT_UP_FRONT[n] ?? 'your pick in custom mode'
       : 'kept as this conversation started'
   // Of the tools that connected late, Claude Code adds those that asked in full, in a message.
-  const added = late.filter(n => asked.includes(n) && !full.has(n) && !pending.includes(n))
-  // A tool kept in full that is name-only connected late, or was saved since.
-  const later = tools.filter(n => !full.has(n) && !pending.includes(n) && !added.includes(n) && kept.has(n))
-  const nameOnly = tools.filter(n => !full.has(n) && !pending.includes(n) && !added.includes(n) && !kept.has(n))
-  const madeNameOnly = (n: string) => RECOMMENDED[n] && list.includes(n)
+  const added = late.filter(n => asked.includes(n) && !full.has(n) && !unplaced.includes(n))
+  // Name-only now, but up-front under the saved list: it connected late, or the list was saved since.
+  const later = tools.filter(n => !full.has(n) && !unplaced.includes(n) && !added.includes(n) && upFront.has(n))
+  const nameOnly = tools.filter(n => !full.has(n) && !unplaced.includes(n) && !added.includes(n) && !upFront.has(n))
+  const madeNameOnly = (n: string) => DEFAULT_UP_FRONT[n] && list.includes(n)
   const { nameOnly: made, full: keptFull } = toSaved(list)
   return [
     `Saved mode: ${list.length ? 'custom' : 'default'}. Surfaces: ${surfaces.join(', ') || 'none (a -p run or the SDK)'}.`,
-    ...(placed ? [] : ['ToolSearch is off, so every tool is described up-front whatever the mode.']),
+    ...(deferred ? [] : ['ToolSearch is off, so every tool is described up-front whatever the mode.']),
     ...(made.length ? [`Custom mode makes these name-only: ${made.join(', ')}.`] : []),
     ...(keptFull.length ? [`Custom mode keeps these described up-front: ${keptFull.join(', ')}.`] : []),
     ...(list.length ? ['A save replaces what custom mode changes.'] : []),
@@ -86,7 +89,7 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
     ...section('Name-only in custom mode:', nameOnly.filter(madeNameOnly)),
     ...section('Name-only by less-bloat, which Claude Code would describe up-front:', nameOnly.filter(n => asked.includes(n) && !madeNameOnly(n))),
     ...section('Name-only by design:', nameOnly.filter(n => !asked.includes(n) && !madeNameOnly(n))),
-    ...section('Placed with the next request:', pending),
+    ...section('Placed with the next request:', unplaced),
   ].join('\n')
 }
 
@@ -96,8 +99,8 @@ function section(heading: string, tools: string[]): string[] {
   const lines: string[] = []
   for (const n of tools) {
     const [, server, tool] = n.match(/^(mcp__.+?__)(.+)$/) ?? []
-    if (server && tool && !RECOMMENDED[n]) servers.set(server, [...(servers.get(server) ?? []), tool])
-    else lines.push(RECOMMENDED[n] ? `- ${n}: ${RECOMMENDED[n]}` : `- ${n}`)
+    if (server && tool && !DEFAULT_UP_FRONT[n]) servers.set(server, [...(servers.get(server) ?? []), tool])
+    else lines.push(DEFAULT_UP_FRONT[n] ? `- ${n}: ${DEFAULT_UP_FRONT[n]}` : `- ${n}`)
   }
   return tools.length ? [heading, ...lines, ...[...servers].map(([server, names]) => `- ${server}*: ${names.join(', ')}`)] : []
 }
