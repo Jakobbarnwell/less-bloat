@@ -1,6 +1,6 @@
 # `less-bloat`
 
-Kill the bloat in Claude Code's system prompt, without turning a single tool off.
+> Kill the bloat in Claude Code's system prompt, without turning a single tool off.
 
 A lightweight Claude mod that strips the bloat from the system prompt **without** turning any tools off. 
 
