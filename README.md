@@ -2,6 +2,10 @@
 
 Kill the bloat in Claude Code's system prompt, without turning a single tool off.
 
+A lightweight Claude mod that strips the bloat from the system prompt **without** turning any tools off. 
+
+one install -> ~50% less tokens in your system prompt
+
 [![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/jakobbarnwell)
 
 | Tokens to start a session | Without | With `less-bloat` | Savings (%) |
