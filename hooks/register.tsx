@@ -5,7 +5,7 @@ import { buttons, choices, elsewhere, place, rows, toolCount, unlisted } from '.
 import type { Row } from './pane'
 import { CHANGE, changes, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
-import { firstSentence, fromSaved, isNames, loadedInFull, same, toSaved } from './tools'
+import { firstSentence, fromSaved, isNames, loadedInFull, REQUIRED, same, toSaved } from './tools'
 import type { List } from './tools'
 import type { Pane } from '../types'
 
@@ -21,8 +21,8 @@ export const register: Register = on => {
   // Custom mode's list, read once per conversation, so a save applies from the next one.
   let listed: Promise<List> | undefined
 
-  // A tool keeps its first placement all conversation, so the prompt cache holds. One that arrives
-  // after the first prompt keeps the engine's placement, unless the mode keeps it in full.
+  // A tool keeps its first placement all conversation, so the prompt cache holds. One the main loop
+  // gets after the first prompt, but a required one, is name-only until the next conversation.
   on('tool.describe', async ($, e, next) => {
     const result = await next(e)
     const list = await (listed ??= saved($))
@@ -30,15 +30,19 @@ export const register: Register = on => {
     const named = await read($, { plugin: 'less-bloat', key: 'named', id: session })
     // The engine's own placement, which an MCP server's alwaysLoad sets.
     const asked = !(result.isDeferred ?? e.isDeferred ?? false)
-    const isDeferred = loadedInFull(list).has(e.tool) ? false : !named || named.includes(e.tool) || !asked
+    const kept = loadedInFull(list)
+    const late = Boolean(named && !named.includes(e.tool) && !REQUIRED.includes(e.tool)
+      && (await $.tool.list()).some(t => t.name === e.tool))
+    const isDeferred = late || !kept.has(e.tool)
     const id = `${session}:${e.tool}`
     const [placed, wasAsked] = await Promise.all([
       update($, { plugin: 'less-bloat', key: 'deferred', id }, first => first ?? isDeferred),
       update($, { plugin: 'less-bloat', key: 'asked', id }, first => first ?? asked),
     ])
-    await update($, { plugin: 'less-bloat', key: 'sentence', id }, first => first ?? (wasAsked && placed ? firstSentence(result.description) : ''))
-    // One the user made name-only themselves needs no telling.
-    if (wasAsked && placed && !list.includes(e.tool)) tell($, e.tool)
+    // A late tool gets none, as the first message's context is already sent.
+    await update($, { plugin: 'less-bloat', key: 'sentence', id }, first => first ?? (wasAsked && placed && !late ? firstSentence(result.description) : ''))
+    // One the user made name-only themselves, or keeps in full, needs no telling.
+    if (wasAsked && placed && !list.includes(e.tool) && !kept.has(e.tool)) tell($, e.tool)
     return { ...result, isDeferred: placed }
   })
 
@@ -59,7 +63,7 @@ export const register: Register = on => {
     const tools = (await $.tool.list()).map(t => t.name)
     const loaded = loadedInFull(await (listed ??= saved($)))
     const deferred = tools.filter(n => !loaded.has(n))
-    const { version } = await $.state.set(named, deferred)
+    const { version } = await $.state.set(named, tools)
     const placed = await placements($, tools)
     const unnamed = tools.includes('ToolSearch') ? deferred.filter(n => !(n in placed)) : []
     const result = await next(unnamed.length ? { ...e, context: [...(e.context ?? []), NOTE + unnamed.join(', ')] } : e)

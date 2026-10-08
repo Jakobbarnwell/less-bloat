@@ -1,7 +1,7 @@
 // less-bloat's values in $.state, which a reload of the mod keeps. deferred, asked, sentence and named are kept per
 // conversation, by its session id, which /clear and a resume change.
 
-// The tools deferred as a conversation's first prompt went out; null or unset before it.
+// The tools a conversation's first prompt went out with; null or unset before it.
 export type Named = string[] | null
 
 // Custom mode's list: the tools it places otherwise than default mode does.
