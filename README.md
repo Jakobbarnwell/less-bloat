@@ -6,8 +6,6 @@ A lightweight Claude mod that strips the bloat from the system prompt **without*
 
 one install -> ~50% less tokens in your system prompt
 
-[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/jakobbarnwell)
-
 | Tokens to start a session | Without | With `less-bloat` | Savings (%) |
 | --- | --- | --- | --- |
 | CLI, out-of-the-box | 31,728 | 14,153 | 55.4% |
@@ -214,6 +212,8 @@ cache still holds. Claude Code lists the name-only tools again, and `less-bloat`
 Inspired by Matt Pocock's [thread](https://x.com/mattpocockuk/status/2074464823232888987) and
 [article](https://www.aihero.dev/how-to-kill-the-bloat-in-claude-codes-system-prompt) on killing the
 bloat in Claude Code's system prompt.
+
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/jakobbarnwell)
 
 ## License
 
