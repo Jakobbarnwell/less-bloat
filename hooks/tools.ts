@@ -29,18 +29,33 @@ export const RECOMMENDED: Record<string, string> = {
   mcp__hearthbot__no_reply_needed: THREAD,
 }
 
-// Custom mode's list: the tools default mode keeps in full that the user made name-only. A tool
-// default mode makes name-only stays so.
+// Custom mode's list: the tools it places otherwise than default mode does. One default mode keeps in
+// full goes name-only; any other goes in full.
 export type List = string[]
 
 export function isNames(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(n => typeof n === 'string')
 }
 
-// The list as it is saved: only the tools default mode keeps in full, each once. One that changes
-// nothing is default mode's, the empty list.
+// Custom mode as the store keeps it: which way each tool goes, so a later version's default list
+// doesn't turn a choice around.
+export type Saved = { nameOnly: string[]; full: string[] }
+
+export function toSaved(list: List): Saved {
+  return { nameOnly: list.filter(n => RECOMMENDED[n]), full: list.filter(n => !RECOMMENDED[n]) }
+}
+
+// The list from what the store keeps, without the choices default mode makes now. Anything else is
+// default mode's, the empty list.
+export function fromSaved(value: unknown): List {
+  const { nameOnly, full } = (value ?? {}) as Partial<Saved>
+  if (!isNames(nameOnly) || !isNames(full)) return []
+  return effective([...nameOnly.filter(n => RECOMMENDED[n]), ...full.filter(n => !RECOMMENDED[n])])
+}
+
+// The list as it is saved: each tool once, and none required, as those are in full in every mode.
 export function effective(list: List): List {
-  return [...new Set(list)].filter(t => RECOMMENDED[t])
+  return [...new Set(list)].filter(t => !REQUIRED.includes(t))
 }
 
 // Whether two lists say the same, in any order.
@@ -65,7 +80,7 @@ export function firstSentence(description: string): string {
   return sentence.length <= 200 ? sentence : `${sentence.slice(0, 201).replace(/\s+\S*$/, '').slice(0, 200)}…`
 }
 
-// The tools to load in full: default mode's, less the ones custom mode makes name-only.
+// The tools to load in full: default mode's, with custom mode's changes.
 export function loadedInFull(list: List): Set<string> {
-  return new Set([...REQUIRED, ...Object.keys(RECOMMENDED)].filter(n => !list.includes(n)))
+  return new Set([...REQUIRED, ...Object.keys(RECOMMENDED).filter(n => !list.includes(n)), ...list.filter(n => !RECOMMENDED[n])])
 }

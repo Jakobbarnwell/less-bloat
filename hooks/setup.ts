@@ -1,4 +1,4 @@
-import { loadedInFull, RECOMMENDED, REQUIRED } from './tools'
+import { effective, loadedInFull, RECOMMENDED, REQUIRED, toSaved } from './tools'
 import type { List } from './tools'
 
 // Custom mode is set in /less-bloat's pane (register.tsx), or by asking Claude, which reads and saves
@@ -12,8 +12,8 @@ export const CHANGE = 'To change it, run /less-bloat in a Claude Code session, o
 
 const DESCRIPTION = `Shows and changes which tools Claude sees with their full description in every system prompt, and which by name only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps in full, and an MCP server's that connects after the first message and asks for its full description. Run it as a short setup with the user:
 1. Call it with no input. It lists this conversation's tools: which have their full description and why, and which are name-only.
-2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools default mode keeps in full and why, and offer to make the ones they don't need name-only. Required tools always stay in full.
-3. Show the user what changes, old → new, then call it with mode "custom" and nameOnly (the tools default mode keeps in full to make name-only), as exact tool names, or with mode "default" to keep them all in full.
+2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools default mode keeps in full and why, and which Claude Code would put in full that less-bloat makes name-only. Offer to make the ones in full they don't need name-only, and to keep in full the ones they use often. Required tools always stay in full.
+3. Show the user what changes, old → new, then call it with mode "custom", nameOnly (tools default mode keeps in full to make name-only) and full (other tools to keep in full), as exact tool names, or with mode "default" to undo every change. A save replaces the one before.
 Changes apply from the next conversation: a new session or /clear.`
 
 const INPUT = {
@@ -21,29 +21,42 @@ const INPUT = {
   properties: {
     mode: { type: 'string', enum: ['default', 'custom'] },
     nameOnly: { type: 'array', items: { type: 'string' }, description: 'Exact names of tools default mode keeps in full to make name-only' },
+    full: { type: 'array', items: { type: 'string' }, description: 'Exact names of other tools to keep in full' },
   },
 }
 
-export type Input = { mode?: 'default' | 'custom'; nameOnly?: string[] }
+export type Input = { mode?: 'default' | 'custom'; nameOnly?: string[]; full?: string[] }
 
 // Registered when the session starts.
 export const SETUP = { name: NAME, description: DESCRIPTION, inputSchema: INPUT }
 
-// What a save warns about: a tool default mode keeps in full that this session doesn't have, such
-// as the desktop app's, which is saved; and a required tool, another tool here, and a name of no
-// tool here, a typo or another app's tool, which aren't.
-export function warnings(tools: string[], list: List): string[] {
-  const names = [...new Set(list)]
-  const absent = names.filter(n => RECOMMENDED[n] && !tools.includes(n))
-  const required = names.filter(n => REQUIRED.includes(n))
-  const left = names.filter(n => !RECOMMENDED[n] && !REQUIRED.includes(n))
-  const nameOnly = left.filter(n => tools.includes(n))
-  const unknown = left.filter(n => !tools.includes(n))
+// The list a save makes: the tools in nameOnly that default mode keeps in full, which may be another
+// app's, such as the desktop app's; and the other tools in full, here or already on the list before.
+// A tool in both lists is in neither.
+export function changes(tools: string[], before: List, nameOnly: List, full: List): List {
+  const both = (n: string) => nameOnly.includes(n) && full.includes(n)
+  const known = (n: string) => tools.includes(n) || before.includes(n)
+  return effective([...nameOnly.filter(n => RECOMMENDED[n]), ...full.filter(n => !RECOMMENDED[n] && known(n))].filter(n => !both(n)))
+}
+
+// What a save warns about: a tool it saves that this session doesn't have; and each name it doesn't
+// save: a required tool, one in both lists, one default mode already places that way, and a name of
+// no tool here, a typo or another app's tool.
+export function warnings(tools: string[], before: List, nameOnly: List, full: List): string[] {
+  const saved = changes(tools, before, nameOnly, full)
+  const given = [...new Set([...nameOnly, ...full])]
+  const required = given.filter(n => REQUIRED.includes(n))
+  const both = given.filter(n => nameOnly.includes(n) && full.includes(n) && !required.includes(n))
+  const left = given.filter(n => !saved.includes(n) && !required.includes(n) && !both.includes(n))
+  const unknown = left.filter(n => !RECOMMENDED[n] && !tools.includes(n))
+  const already = left.filter(n => !unknown.includes(n))
+  const absent = saved.filter(n => !tools.includes(n))
   return [
     absent.length ? `Saved, though this session doesn't have them: ${absent.join(', ')}.` : '',
     required.length ? `Not saved, as these are always in full: ${required.join(', ')}.` : '',
-    nameOnly.length ? `Not saved, as only tools default mode keeps in full can be made name-only: ${nameOnly.join(', ')}.` : '',
-    unknown.length ? `Not saved, as no tool here has these names and default mode doesn't keep them in full: ${unknown.join(', ')}.` : '',
+    both.length ? `Not saved, as these are in both lists: ${both.join(', ')}.` : '',
+    already.length ? `Not saved, as default mode already places these that way: ${already.join(', ')}.` : '',
+    unknown.length ? `Not saved, as no tool here has these names: ${unknown.join(', ')}.` : '',
   ].filter(Boolean)
 }
 
@@ -59,18 +72,22 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
   const why = (n: string) =>
     REQUIRED.includes(n) ? 'required'
       : !placed ? 'ToolSearch is off'
-      : kept.has(n) ? RECOMMENDED[n]!
+      : kept.has(n) ? RECOMMENDED[n] ?? 'kept in full in custom mode'
       : 'kept as this conversation started, or it arrived later and keeps its own placement'
   const nameOnly = tools.filter(n => !full.has(n) && !pending.includes(n))
+  const madeNameOnly = (n: string) => RECOMMENDED[n] && list.includes(n)
+  const { nameOnly: made, full: keptFull } = toSaved(list)
   return [
     `Saved mode: ${list.length ? 'custom' : 'default'}. Surfaces: ${surfaces.join(', ') || 'none (a -p run or the SDK)'}.`,
     ...(placed ? [] : ['ToolSearch is off, so every tool goes in full whatever the mode.']),
-    ...(list.length ? [`Custom mode makes these name-only: ${list.join(', ')}. A save replaces this list.`] : []),
+    ...(made.length ? [`Custom mode makes these name-only: ${made.join(', ')}.`] : []),
+    ...(keptFull.length ? [`Custom mode keeps these in full: ${keptFull.join(', ')}.`] : []),
+    ...(list.length ? ['A save replaces what custom mode changes.'] : []),
     'Full description:',
     ...tools.filter(n => full.has(n)).map(n => `- ${n}: ${why(n)}`),
-    ...section('Name-only in custom mode:', nameOnly.filter(n => list.includes(n))),
-    ...section('Name-only by less-bloat, which Claude Code would put in full:', nameOnly.filter(n => asked.includes(n) && !list.includes(n))),
-    ...section('Name-only by design:', nameOnly.filter(n => !asked.includes(n) && !list.includes(n))),
+    ...section('Name-only in custom mode:', nameOnly.filter(madeNameOnly)),
+    ...section('Name-only by less-bloat, which Claude Code would put in full:', nameOnly.filter(n => asked.includes(n) && !madeNameOnly(n))),
+    ...section('Name-only by design:', nameOnly.filter(n => !asked.includes(n) && !madeNameOnly(n))),
     ...section('Placed with the next request:', pending),
   ].join('\n')
 }

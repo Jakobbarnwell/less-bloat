@@ -33,10 +33,11 @@ Want to see it work? Ask Claude:
 - **Default** keeps the full description for Bash, Read, Edit, Write, Glob, Grep, Agent, Skill,
   AskUserQuestion and SendUserFile, plus the desktop app's chapter, side-task and widget tools when
   you're in the app, and a project thread's reply tools.
-- **Custom** makes some of those name-only too. Run `/less-bloat` to open a pane with the tools
-  default mode keeps in full, each with why it's there. Uncheck the ones you don't need and save, or
-  ask Claude to. Your choice holds for every session, CLI and desktop alike. Custom mode can't put
-  other tools in full.
+- **Custom** is your own picks. Run `/less-bloat` to open a pane with the tools where the choice
+  matters: the ones Claude Code would put in full that less-bloat makes name-only, such as Artifact,
+  and the ones default mode keeps in full, each with why it's there. Check a tool you use often to
+  keep it in full, uncheck one you don't need, and save, or ask Claude to. Your choice holds for
+  every session, CLI and desktop alike.
 
 A change applies from your next conversation: a new session or `/clear`. The tools sit at the start
 of every request, so changing them mid-conversation would throw away the prompt cache.
@@ -90,7 +91,7 @@ Claude.
 **What happens when I add an MCP server?** Most servers' tools are name-only in Claude Code anyway,
 so nothing changes. One that asks for its full description gets name-only too, with a notice. A
 server that connects after your first message stays as Claude Code placed it until your next
-conversation.
+conversation, unless you keep its tools in full.
 
 **Does `/clear` reset less-bloat?** The new conversation starts fresh. less-bloat keeps each
 earlier conversation's placements in memory until Claude Code exits, so `/resume` back to one keeps
@@ -133,7 +134,8 @@ also recommend running `/skill-doctor` to see which skills you use, and disablin
   request can't reuse the cache when either changed.
 - **A name-only tool's first use takes a ToolSearch call** to fetch its full description.
 - **An MCP server that connects after your first message** stays as Claude Code placed it until your
-  next conversation, as its tools arrive too late to change safely.
+  next conversation, as its tools arrive too late to change safely. A tool of its you keep in full
+  goes in full when it arrives, which costs that request the prompt cache.
 - **Needs ToolSearch.** Claude Code turns it off with `ENABLE_TOOL_SEARCH=false`, and by default
   behind a custom `ANTHROPIC_BASE_URL` such as a gateway. Then every tool goes in full.
 - **Not in cloud sessions, WSL or Cowork,** which don't load your plugins. In a desktop app

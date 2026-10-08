@@ -1,10 +1,11 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buttons, counts, elsewhere, rows, toolCount } from './pane'
-import { CHANGE, COMMAND, notice, report, SETUP, warnings } from './setup'
+import { buttons, choices, counts, elsewhere, place, rows, toolCount } from './pane'
+import type { Row } from './pane'
+import { CHANGE, changes, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
-import { effective, firstSentence, isNames, loadedInFull, same } from './tools'
+import { firstSentence, fromSaved, isNames, loadedInFull, same, toSaved } from './tools'
 import type { List } from './tools'
 import type { Pane } from '../types'
 
@@ -31,7 +32,7 @@ export const register: Register = on => {
   // A tool keeps its first placement for the whole conversation, whatever is saved later,
   // so the tools sent stay the same and the prompt cache holds. One that appears after the first
   // prompt, such as a slow MCP server's, wasn't named then, so it keeps the engine's placement,
-  // which the engine names itself.
+  // which the engine names itself, unless the mode keeps it in full.
   on('tool.describe', async ($, e, next) => {
     const result = await next(e)
     const list = await (listed ??= saved($))
@@ -123,19 +124,33 @@ export const register: Register = on => {
     return (await open($, await saved($))) ? {} : { text: await listing($) }
   })
 
-  // The settings pane /less-bloat opens: each tool default mode keeps in full, checked while in
-  // full, and unchecked to make it name-only, saved as custom mode's list. It draws from what open()
+  // The settings pane /less-bloat opens: each tool whose place is a choice, checked while in full,
+  // toggled to change it from default mode, saved as custom mode's list. It draws from what open()
   // took in, so drawing reads nothing else.
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const { value: shown } = await $.state.get(PANE)
     if (!shown) return <Text dimColor>Run /less-bloat again.</Text>
     const isTerminal = e.surface === 'terminal'
-    const { full, nameOnly, unlisted, made } = counts(shown)
+    const { full, nameOnly, unlisted } = counts(shown)
     const absent = elsewhere(shown)
-    const shownRows = rows(shown)
+    const { trimmed, kept } = rows(shown)
     const marks = isTerminal ? { full: '[x]', nameOnly: '[ ]' } : { full: '☑', nameOnly: '☐' }
-    const toggle = (tool: string) => redraft($, draft => (draft.includes(tool) ? draft.filter(t => t !== tool) : [...draft, tool]))
+    // A group of rows under its heading; nothing for none. The first row of the pane takes the keyboard.
+    const group = (heading: string, hint: string, list: Row[]) => list.length ? (
+      <Box flexDirection="column" marginTop={1}>
+        <Text bold>{heading}<Text dimColor> {hint}</Text></Text>
+        {list.map(row => (
+          // The note goes under the name where the two don't fit on one line.
+          <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
+            <Button key={row.key} plain autoFocus={row.key === (trimmed[0] ?? kept[0])?.key || undefined} onPress={() => redraft($, draft => place(draft, row.tools, !row.inFull))}>
+              {`${row.inFull ? marks.full : marks.nameOnly} ${row.label}`}
+            </Button>
+            {row.note ? <Text dimColor>{row.note}</Text> : null}
+          </Box>
+        ))}
+      </Box>
+    ) : null
     return (
       <Box flexDirection="column">
         {/* Clear of the close mark the terminal draws in the pane's top corner. */}
@@ -156,25 +171,16 @@ export const register: Register = on => {
             {toolCount(full)} in full, {nameOnly} name-only.
             <Text dimColor> A tool in full has its description in every system prompt; Claude fetches a name-only tool's when it needs the tool.</Text>
           </Text>
-          <Text dimColor>
-            Default mode keeps these in full, for the reason given. Uncheck the ones you don't need to make them name-only.
-            {unlisted ? ` The other ${toolCount(unlisted)} are name-only${made ? `, ${made} of which Claude Code would put in full` : ''}.` : ''}
-            {' ToolSearch is always in full, as Claude fetches the others with it.'}
-          </Text>
-          {absent ? <Text dimColor>Custom mode also makes {toolCount(absent)} name-only that this conversation doesn't have.</Text> : null}
+          {absent ? <Text dimColor>Custom mode also changes {toolCount(absent)} that this conversation doesn't have.</Text> : null}
           <Text dimColor>{shown.status || 'A saved change applies from your next conversation.'}</Text>
         </Box>
-        <Box flexDirection="column" marginTop={1}>
-          {shownRows.length ? null : <Text dimColor>None in this conversation.</Text>}
-          {shownRows.map((row, i) => (
-            // The note goes under the name where the two don't fit on one line.
-            <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
-              <Button key={row.key} plain autoFocus={i === 0 || undefined} onPress={() => toggle(row.tool)}>
-                {`${row.inFull ? marks.full : marks.nameOnly} ${row.label}`}
-              </Button>
-              <Text dimColor>{row.note}</Text>
-            </Box>
-          ))}
+        {group('Name-only by default.', 'Claude Code would put these in full, unless noted. Check one you use often to keep it in full.', trimmed)}
+        {group('In full by default.', "Uncheck one you don't need to make it name-only.", kept)}
+        <Box marginTop={1}>
+          <Text dimColor>
+            {unlisted ? `The other ${toolCount(unlisted)} are name-only in Claude Code too. ` : ''}
+            ToolSearch is always in full, as Claude fetches the others with it.
+          </Text>
         </Box>
       </Box>
     )
@@ -213,24 +219,27 @@ export const register: Register = on => {
   // /clear.
   on('tool.call', { tool: 'mcp__less-bloat__setup' }, async ($, e) => {
     const input = e as Input
+    const given = input.nameOnly || input.full
     if (input.mode !== 'default' && input.mode !== 'custom') {
-      return { result: input.mode || input.nameOnly ? `Not saved: pass mode "default" or "custom" to save.\n${await listing($)}` : await listing($) }
+      return { result: input.mode || given ? `Not saved: pass mode "default" or "custom" to save.\n${await listing($)}` : await listing($) }
     }
-    if (input.mode === 'custom' && !input.nameOnly) return { result: `Not saved: custom mode needs nameOnly.\n${await listing($)}` }
-    if (input.mode === 'default' && input.nameOnly?.length) return { result: `Not saved: default mode takes no nameOnly.\n${await listing($)}` }
-    const list = input.mode === 'default' ? [] : input.nameOnly
-    if (!isNames(list)) return { result: 'Not saved: nameOnly must be a list of tool names.' }
+    if (input.mode === 'custom' && !given) return { result: `Not saved: custom mode needs nameOnly or full.\n${await listing($)}` }
+    if (input.mode === 'default' && (input.nameOnly?.length || input.full?.length)) return { result: `Not saved: default mode takes no nameOnly or full.\n${await listing($)}` }
+    const nameOnly = input.nameOnly ?? []
+    const full = input.full ?? []
+    if (!isNames(nameOnly) || !isNames(full)) return { result: 'Not saved: nameOnly and full must be lists of tool names.' }
     const tools = (await $.tool.list()).map(t => t.name)
-    // Saved without the entries that change nothing, as the pane saves it. Custom mode with none
-    // left, as from a typo, would be default mode, so it saves nothing.
-    const kept = effective(list)
+    const before = await saved($)
+    // Saved without the entries that change nothing. Custom mode with none left, as from a typo,
+    // would be default mode, so it saves nothing.
+    const kept = changes(tools, before, nameOnly, full)
     if (input.mode === 'custom' && !kept.length) {
-      return { result: [`Not saved: nameOnly names no tool default mode keeps in full. To go back to default, pass mode "default".`, ...warnings(tools, list)].join(' ') }
+      return { result: [`Not saved: this changes nothing from default mode. To go back to default, pass mode "default".`, ...warnings(tools, before, nameOnly, full)].join(' ') }
     }
     const isDefault = !kept.length
     if (isDefault) await $.store.delete('list')
-    else await $.store.set('list', kept)
-    return { result: [`Saved ${isDefault ? 'default' : 'custom'} mode. It applies from the next conversation.`, ...warnings(tools, list)].join(' ') }
+    else await $.store.set('list', toSaved(kept))
+    return { result: [`Saved ${isDefault ? 'default' : 'custom'} mode. It applies from the next conversation.`, ...warnings(tools, before, nameOnly, full)].join(' ') }
   })
 }
 
@@ -316,11 +325,10 @@ async function announced($: EngineInterface): Promise<string[] | undefined> {
   return isNames(told) ? told : undefined
 }
 
-// Custom mode's list, in the mod's store, which every session reads, without entries that change
-// nothing. None saved or one that can't be read is default mode's, the empty list.
+// Custom mode's list, in the mod's store, which every session reads, without required tools. None
+// saved or one that can't be read is default mode's, the empty list.
 async function saved($: EngineInterface): Promise<List> {
-  const list = await $.store.get('list').catch(() => undefined)
-  return isNames(list) ? effective(list) : []
+  return fromSaved(await $.store.get('list').catch(() => undefined))
 }
 
 // The settings pane's id, what it draws, and where the keyboard is in it.
@@ -333,7 +341,8 @@ const RING = { plugin: 'less-bloat', key: 'ring' } as const
 async function open($: EngineInterface, list: List): Promise<boolean> {
   const tools = (await $.tool.list()).map(t => t.name)
   if (!tools.includes('ToolSearch')) return false
-  await $.state.set(PANE, { tools, asked: await askers($, tools), saved: list, draft: list, status: '' })
+  const asked = await askers($, tools)
+  await $.state.set(PANE, { tools, asked, choices: choices(tools, asked, list), saved: list, draft: list, status: '' })
   // A new pane is on none of its buttons until the first row takes the keyboard, and one with no
   // rows has none; a pane already up keeps where its keyboard is.
   if (!(await $.ui.panes()).some(pane => pane.id === PANE_ID)) await $.state.set(RING, '')
@@ -348,7 +357,7 @@ async function save($: EngineInterface) {
   const isDefault = !shown.draft.length
   try {
     if (isDefault) await $.store.delete('list')
-    else await $.store.set('list', shown.draft)
+    else await $.store.set('list', toSaved(shown.draft))
   } catch (error) {
     return edit($, p => ({ ...p, status: `Not saved: ${error instanceof Error ? error.message : error}` }))
   }
