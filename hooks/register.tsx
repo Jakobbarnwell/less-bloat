@@ -153,7 +153,7 @@ export const register: Register = on => {
     const marks = isTerminal ? { full: '[x]', nameOnly: '[ ]' } : { full: '☑', nameOnly: '☐' }
     const group = (heading: string, hint: string, list: Row[]) => list.length ? (
       <Box flexDirection="column" marginTop={1}>
-        <Text bold>{heading} ({list.reduce((n, r) => n + r.tools.length, 0)})<Text dimColor> {hint}</Text></Text>
+        <Text bold>{heading}: {toolCount(list.reduce((n, r) => n + r.tools.length, 0))}<Text dimColor> · {hint}</Text></Text>
         {list.map(row => (
           // A Button's label takes no color, so the name sits beside the mark.
           <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>

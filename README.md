@@ -25,7 +25,8 @@ Recommended: Paste this into Claude Code, CLI or desktop:
 
 > Install the `less-bloat` plugin from the `jakobbarnwell/less-bloat` marketplace. Then, based on how
 > I use Claude Code, tell me whether I should use default mode, and whether to turn back on any tools,
-> MCP servers or connectors I turned off to save context.
+> MCP servers or connectors I turned off to save context. Call tools "described up-front" or
+> "name-only", as the less-bloat README does.
 
 Or install it yourself, in Claude Code:
 
@@ -214,7 +215,7 @@ cache still holds. Claude Code lists the name-only tools again, and `less-bloat`
 - **A name-only tool's first use takes a ToolSearch call** to fetch its full description. That's why the basic and most used tools stay described up-front. If you use a tool in every session, consider putting it up-front. 
 - **An MCP server that connects late (after your first message)** isn't placed by `less-bloat` in
   that conversation. Claude Code adds its tools in a message instead, which keeps the prompt cache:
-  in full if they ask for their full description, by name otherwise.
+  described up-front if they ask for their full description, name-only otherwise.
 - **Needs ToolSearch.** Claude Code turns it off with `ENABLE_TOOL_SEARCH=false`, and by default
   behind a custom `ANTHROPIC_BASE_URL` such as a gateway. Then every tool is described up-front.
 - **Not in cloud sessions, WSL, normal Claude chats, or Cowork,** which don't load your plugins. In a desktop app's

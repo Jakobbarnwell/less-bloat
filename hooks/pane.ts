@@ -1,4 +1,4 @@
-import { upFrontTools, DEFAULT_UP_FRONT, REQUIRED } from './tools'
+import { upFrontTools, isConnectorId, DEFAULT_UP_FRONT, REQUIRED } from './tools'
 import type { List, Pane } from '../types'
 
 type Shown = NonNullable<Pane>
@@ -16,7 +16,7 @@ export function rows(shown: Shown): { upFront: Row[]; nameOnly: Row[] } {
   const full = upFrontTools(shown.draft)
   const row = (key: string, tools: string[]): Row => {
     const inFull = tools.every(t => full.has(t))
-    const name = tools.length === 1 ? label(tools[0]!) : `${key}: ${toolCount(tools.length)}`
+    const name = tools.length === 1 ? label(tools[0]!) : `${server(key)}: ${toolCount(tools.length)}`
     const byDefault = Boolean(DEFAULT_UP_FRONT[tools[0]!])
     const asked = tools.some(t => shown.asked.includes(t))
     const note = `less-bloat default: ${byDefault ? 'up-front' : 'name-only'} · Claude Code default: ${asked ? 'up-front' : 'name-only'}`
@@ -64,6 +64,11 @@ export function toolCount(n: number): string {
 }
 
 function label(name: string): string {
-  const [, server, tool] = name.match(/^mcp__(.+?)__(.+)$/) ?? []
-  return server && tool ? `${server}: ${tool}` : name
+  const [, key, tool] = name.match(/^mcp__(.+?)__(.+)$/) ?? []
+  return key && tool ? `${server(key)}: ${tool}` : name
+}
+
+// A connector named only by an ID shows as "connector" and the ID's first part.
+function server(key: string): string {
+  return isConnectorId(key) ? `connector ${key.slice(0, 8)}` : key
 }

@@ -1,4 +1,4 @@
-import { effective, upFrontTools, DEFAULT_UP_FRONT, REQUIRED, toSaved } from './tools'
+import { effective, isConnectorId, upFrontTools, DEFAULT_UP_FRONT, REQUIRED, toSaved } from './tools'
 import type { List } from '../types'
 
 // Custom mode through Claude: this tool, which register.tsx answers.
@@ -118,9 +118,8 @@ export function notice(tools: string[], first: boolean, mode?: 'default' | 'cust
   }
   // Biggest servers first; connectors named only by an ID are counted together.
   const sorted = [...servers].sort((a, b) => b[1] - a[1])
-  const isId = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s)
-  const named = sorted.filter(([s]) => !isId(s)).map(([s, n]) => `${s} (${n})`)
-  const unnamed = sorted.filter(([s]) => isId(s))
+  const named = sorted.filter(([s]) => !isConnectorId(s)).map(([s, n]) => `${s} (${n})`)
+  const unnamed = sorted.filter(([s]) => isConnectorId(s))
   const unnamedTools = unnamed.reduce((sum, [, n]) => sum + n, 0)
   const names = [
     ...(own.length ? [some(own)] : []),
@@ -131,8 +130,8 @@ export function notice(tools: string[], first: boolean, mode?: 'default' | 'cust
   const count = `${tools.length}${first ? '' : ' new'}`
   const noun = one ? 'tool' : 'tools'
   const toast = `${count} non-essential ${noun} that asked to bloat your system prompt ${one ? 'is' : 'are'} now name-only.`
-  const line = mode ? `less-bloat applied ${mode === 'default' ? 'its default' : 'your custom'} settings and made ${count} ${noun} name-only. Run /less-bloat to see or change them.` : [
-    `less-bloat made ${count} ${noun} name-only: ${names}.`,
+  const line = mode ? `less-bloat applied ${mode === 'default' ? 'its default' : 'your custom'} settings and made ${count} ${noun} name-only + hint. Run /less-bloat to see or change them.` : [
+    `less-bloat made ${count} ${noun} name-only + hint: ${names}.`,
     one ? 'Claude Code would describe it up-front, in every system prompt; Claude now fetches its description only when it uses the tool.'
       : 'Claude Code would describe them up-front, in every system prompt; Claude now fetches each description only when it uses that tool.',
   ].join(' ')

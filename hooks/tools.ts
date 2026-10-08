@@ -34,6 +34,11 @@ export const DEFAULT_UP_FRONT: Record<string, string> = {
   mcp__hearthbot__no_reply_needed: THREAD,
 }
 
+// A connector the desktop app names only by an ID.
+export function isConnectorId(server: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(server)
+}
+
 export function isNames(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(n => typeof n === 'string')
 }
