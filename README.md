@@ -196,8 +196,9 @@ cache still holds. Claude Code lists the name-only tools again, and `less-bloat`
 
 - **`/resume` can invalidate the prompt cache under specific conditions.** If you quit a session, change your `less-bloat` settings, and reopen it within the cache's lifetime, the cache gets invalidated.
 - **A name-only tool's first use takes a ToolSearch call** to fetch its full description.
-- **An MCP server that connects late (after your first message)** has its tools name-only until you
-  start a new session or run `/clear`, even ones you keep described up-front.
+- **An MCP server that connects late (after your first message)** isn't placed by `less-bloat` in
+  that conversation. Claude Code adds its tools in a message instead, which keeps the prompt cache:
+  in full if they ask for their full description, by name otherwise.
 - **Needs ToolSearch.** Claude Code turns it off with `ENABLE_TOOL_SEARCH=false`, and by default
   behind a custom `ANTHROPIC_BASE_URL` such as a gateway. Then every tool is described up-front.
 - **Not in cloud sessions, WSL, normal Claude chats, or Cowork,** which don't load your plugins. In a desktop app's

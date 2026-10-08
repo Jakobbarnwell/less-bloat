@@ -9,8 +9,8 @@ export const COMMAND = { name: 'less-bloat', description: 'Choose which tools ar
 // Shown under the list where the pane can't be drawn, as in `claude -p`.
 export const CHANGE = 'To change it, run /less-bloat in a Claude Code session, or ask Claude.'
 
-const DESCRIPTION = `Shows and changes which tools are described up-front, with their full description in every system prompt, and which are name-only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps described up-front; a tool that arrives after the first message is name-only until the next conversation. Use these two terms with the user. Run it as a short setup with the user:
-1. Call it with no input. It lists this conversation's tools: which are described up-front and why, and which are name-only.
+const DESCRIPTION = `Shows and changes which tools are described up-front, with their full description in every system prompt, and which are name-only, their full description fetched with ToolSearch when Claude wants to use one. The less-bloat plugin makes every tool name-only but the ones it keeps described up-front; a tool that connects after the first message isn't placed by it in that conversation: Claude Code adds it in a message, with its full description if it would describe it up-front, else by name. Use these two terms with the user. Run it as a short setup with the user:
+1. Call it with no input. It lists this conversation's tools: which are described up-front and why, which are name-only, and which Claude Code added in full as they connected late.
 2. Unless the user has said what to change, summarize that for them, then ask with AskUserQuestion. Say which tools default mode keeps described up-front and why, and which Claude Code would describe up-front that less-bloat makes name-only. Offer to make name-only any described up-front they don't need, and to keep described up-front any they use often. Required tools are always described up-front.
 3. Show the user what changes, old → new, then call it with mode "custom", nameOnly (tools to make name-only that default mode keeps described up-front) and upFront (other tools to keep described up-front), as exact tool names, or with mode "default" to undo every change. A save replaces the one before.
 Changes apply from the next conversation: a new session or /clear.`
@@ -56,8 +56,8 @@ export function warnings(tools: string[], before: List, nameOnly: List, full: Li
 }
 
 // This conversation's tools as placed, with why each is in full. Without ToolSearch, placed is null
-// and every tool is in full.
-export function report(tools: string[], placed: Record<string, boolean> | null, list: List, surfaces: string[], asked: string[]): string {
+// and every tool is in full. Late tools arrived after the first prompt.
+export function report(tools: string[], placed: Record<string, boolean> | null, list: List, surfaces: string[], asked: string[], late: string[]): string {
   const pending = placed ? tools.filter(n => !(n in placed)) : []
   const full = new Set(tools.filter(n => placed ? placed[n] === false : true))
   const kept = loadedInFull(list)
@@ -66,9 +66,11 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
       : !placed ? 'ToolSearch is off'
       : kept.has(n) ? RECOMMENDED[n] ?? 'your pick in custom mode'
       : 'kept as this conversation started'
-  // A tool kept in full that is name-only arrived after the first message, or was saved since.
-  const late = tools.filter(n => !full.has(n) && !pending.includes(n) && kept.has(n))
-  const nameOnly = tools.filter(n => !full.has(n) && !pending.includes(n) && !kept.has(n))
+  // Of the tools that connected late, Claude Code adds those that asked in full, in a message.
+  const added = late.filter(n => asked.includes(n) && !full.has(n) && !pending.includes(n))
+  // A tool kept in full that is name-only connected late, or was saved since.
+  const later = tools.filter(n => !full.has(n) && !pending.includes(n) && !added.includes(n) && kept.has(n))
+  const nameOnly = tools.filter(n => !full.has(n) && !pending.includes(n) && !added.includes(n) && !kept.has(n))
   const madeNameOnly = (n: string) => RECOMMENDED[n] && list.includes(n)
   const { nameOnly: made, full: keptFull } = toSaved(list)
   return [
@@ -79,7 +81,8 @@ export function report(tools: string[], placed: Record<string, boolean> | null, 
     ...(list.length ? ['A save replaces what custom mode changes.'] : []),
     'Described up-front:',
     ...tools.filter(n => full.has(n)).map(n => `- ${n}: ${why(n)}`),
-    ...section('Name-only in this conversation, described up-front from the next:', late),
+    ...section('Connected after the first message, so Claude Code added them in a message with their full description:', added),
+    ...section('Name-only in this conversation, described up-front from the next:', later),
     ...section('Name-only in custom mode:', nameOnly.filter(madeNameOnly)),
     ...section('Name-only by less-bloat, which Claude Code would describe up-front:', nameOnly.filter(n => asked.includes(n) && !madeNameOnly(n))),
     ...section('Name-only by design:', nameOnly.filter(n => !asked.includes(n) && !madeNameOnly(n))),

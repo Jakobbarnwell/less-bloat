@@ -22,7 +22,8 @@ export const register: Register = on => {
   let listed: Promise<List> | undefined
 
   // A tool keeps its first placement all conversation, so the prompt cache holds. One the main loop
-  // gets after the first prompt, but a required one, is name-only until the next conversation.
+  // gets after the first prompt, but a required one, is deferred: the engine then adds it in a
+  // message instead of to the tools sent, in full if it would describe it up-front, else by name.
   on('tool.describe', async ($, e, next) => {
     const result = await next(e)
     const list = await (listed ??= saved($))
@@ -41,8 +42,8 @@ export const register: Register = on => {
     ])
     // A late tool gets none, as the first message's context is already sent.
     await update($, { plugin: 'less-bloat', key: 'sentence', id }, first => first ?? (wasAsked && placed && !late ? firstSentence(result.description) : ''))
-    // One the user made name-only themselves, or keeps in full, needs no telling.
-    if (wasAsked && placed && !list.includes(e.tool) && !kept.has(e.tool)) tell($, e.tool)
+    // One that is late, so added in full, or that the user made name-only or keeps in full, needs no telling.
+    if (wasAsked && placed && !late && !list.includes(e.tool) && !kept.has(e.tool)) tell($, e.tool)
     return { ...result, isDeferred: placed }
   })
 
@@ -225,7 +226,9 @@ export const register: Register = on => {
 async function listing($: EngineInterface): Promise<string> {
   const tools = (await $.tool.list()).map(t => t.name)
   const placed = tools.includes('ToolSearch') ? await placements($, tools) : null
-  return report(tools, placed, await saved($), [...await $.session.surfaces()], await askers($, tools))
+  const named = await read($, { plugin: 'less-bloat', key: 'named', id: await $.session.id() })
+  const late = named && placed ? tools.filter(n => !named.includes(n) && !REQUIRED.includes(n)) : []
+  return report(tools, placed, await saved($), [...await $.session.surfaces()], await askers($, tools), late)
 }
 
 // Counting the context makes the engine describe the tools connected now. Until the first prompt

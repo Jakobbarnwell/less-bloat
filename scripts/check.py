@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end check of the mod against a real engine, read from the requests it sends.
 
-Runs five steps through a local proxy that records every request to api.anthropic.com, each with
+Runs six steps through a local proxy that records every request to api.anthropic.com, each with
 an MCP server that asks to stay loaded, with as many tools as the desktop app has:
   1. two prompts in one process, then /clear and a third,
   2. a resume of the first conversation with a third prompt, a compaction, and a fourth prompt,
@@ -11,7 +11,9 @@ an MCP server that asks to stay loaded, with as many tools as the desktop app ha
      ToolSearch, which is required, NotebookEdit, which is name-only already, Bash, which is in
      full already, Edit, which is in both lists, and a name of no tool goes on the list,
   4. a new conversation, which is in custom mode,
-  5. a resume of that one-prompt conversation, with a second prompt.
+  5. a resume of that one-prompt conversation, with a second prompt,
+  6. an interactive session, typed into through a terminal, whose server connects after its first
+     prompt, with a second prompt after.
 It checks that:
   - every request loads in full exactly the tools its mode keeps, of those it carries, and the
     engine's notices or the mod's note name every other tool, from the first request on; ToolSearch, being required,
@@ -25,25 +27,36 @@ It checks that:
     ping in full;
   - each step has the setup tool; the setup saves to the store, and the saving conversation stays
     in default mode while the one after its /clear is in custom mode; the conversation after the
-    first /clear needs no longer a note than the first.
+    first /clear needs no longer a note than the first;
+  - in the interactive session, in custom mode, pong, which asks to stay loaded and arrived late,
+    comes in a message with its definition, no probe tool is announced as name-only, and the tools
+    and system prompt never change.
 
 Usage: scripts/check.py [path to claude]   (default: claude on PATH)
-Costs nine short prompts and a compaction. Sets aside the store of an inline less-bloat, as a
+Costs eleven short prompts and a compaction. Sets aside the store of an inline less-bloat, as a
 .bak file beside it, and puts it back after, so a dev session on this folder sees default mode
-meanwhile and loses a save made then. Deletes the transcripts it makes; prints each request's
-token usage and the file of recorded requests, which it writes even when a step fails; exits 1 on
-failure.
+meanwhile and loses a save made then. The interactive session runs in this folder, which Claude
+Code must already trust, or it stops before typing; its two prompts stay in Claude Code's prompt
+history. Deletes the transcripts it makes; prints each request's token usage and the file of
+recorded requests, which it writes even when a step fails; exits 1 on failure.
 """
+import fcntl
 import http.client
 import glob
 import json
 import os
+import pty
 import re
+import select
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
+import termios
 import threading
+import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PLUGIN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -88,15 +101,20 @@ DESCRIPTIONS = {
 
 # A stdio MCP server that asks to stay loaded, so it is connected when the session starts, and the
 # mod defers its tools as it does Claude Code's own. It has 150 more tools, about as many as the
-# desktop app's servers.
+# desktop app's servers. Given a number of seconds, it takes that long to connect, and leaves a file
+# beside itself once it lists its tools.
 PROBE = """
-import json, sys
+import json, sys, time
 DESCRIPTIONS = __DESCRIPTIONS__
 schema = {'type': 'object', 'properties': {}}
 for line in sys.stdin:
     message = json.loads(line)
     if 'id' not in message:
         continue
+    if message['method'] == 'initialize' and len(sys.argv) > 1:
+        time.sleep(float(sys.argv[1]))
+    if message['method'] == 'tools/list' and len(sys.argv) > 1:
+        open(sys.argv[0] + '.connected', 'w').close()
     result = {
         'initialize': {'protocolVersion': message.get('params', {}).get('protocolVersion'), 'capabilities': {'tools': {}},
                        'serverInfo': {'name': 'probe', 'version': '1'}},
@@ -144,14 +162,9 @@ def claude(cli, cwd, port, prompts, *args):
     """One process answering `prompts` in turn, each sent once the last is answered, as a person
     types them, without the user's settings (where the mod may be installed) or MCP servers but the
     probe. Returns the session id, the process's tools and each prompt's result text."""
-    env = {k: v for k, v in os.environ.items() if k != 'CLAUDE_CODE_PLUGIN_DIRS'}
-    # Behind a base URL that isn't Anthropic's, the engine turns ToolSearch off unless told otherwise.
-    env |= {'ANTHROPIC_BASE_URL': f'http://127.0.0.1:{port}', 'ENABLE_TOOL_SEARCH': 'true'}
-    probe = {'mcpServers': {'probe': {'command': sys.executable, 'args': [f'{cwd}/probe.py'], 'alwaysLoad': True}}}
     process = subprocess.Popen([cli, '-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
-                                '--max-turns', '1', '--setting-sources', 'project', '--strict-mcp-config', '--mcp-config', json.dumps(probe),
-                                '--plugin-dir', PLUGIN, *args],
-                               cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+                                '--max-turns', '1', *isolated(cwd), *args],
+                               cwd=cwd, env=environment(port), stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     events = []
     # A step that never ends kills the process, which fails the step.
     timer = threading.Timer(600, process.kill)
@@ -174,6 +187,89 @@ def claude(cli, cwd, port, prompts, *args):
     # The init message gives Agent by its old name.
     results = [e.get('result', '') for e in events if e.get('type') == 'result']
     return init['session_id'], {'Agent' if t == 'Task' else t for t in init['tools']}, results
+
+
+def environment(port):
+    """The environment of a process that sends its requests through the proxy."""
+    env = {k: v for k, v in os.environ.items() if k != 'CLAUDE_CODE_PLUGIN_DIRS'}
+    # Behind a base URL that isn't Anthropic's, the engine turns ToolSearch off unless told otherwise.
+    return env | {'ANTHROPIC_BASE_URL': f'http://127.0.0.1:{port}', 'ENABLE_TOOL_SEARCH': 'true'}
+
+
+def isolated(cwd, *probe_args):
+    """The arguments that load the mod and the probe, and nothing of the user's."""
+    probe = {'mcpServers': {'probe': {'command': sys.executable, 'args': [f'{cwd}/probe.py', *probe_args], 'alwaysLoad': True}}}
+    return ['--setting-sources', 'project', '--strict-mcp-config', '--mcp-config', json.dumps(probe), '--plugin-dir', PLUGIN]
+
+
+def interactive(cli, cwd, port, exchanges, session, delay):
+    """An interactive session in this folder, typed into through a terminal, whose probe takes
+    `delay` seconds to connect: one prompt before it does and one after, each typed once the last is
+    answered. Returns why it stopped short, if it did."""
+    cli = shutil.which(cli) or cli
+    pid, fd = pty.fork()
+    if pid == 0:
+        # The child never returns into this script, even when the exec fails.
+        try:
+            fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack('HHHH', 50, 160, 0, 0))
+            os.chdir(PLUGIN)
+            os.execve(cli, [cli, '--session-id', session, *isolated(cwd, str(delay))], environment(port) | {'PWD': os.path.realpath(PLUGIN)})
+        finally:
+            os._exit(127)
+    screen = []
+
+    def drain(seconds, quiet=None):
+        """Read what the session draws for `seconds`, or until, once it has drawn, it draws nothing for
+        `quiet` seconds, so it never blocks on a full terminal. Raises OSError once the session has exited."""
+        end, drawn = time.time() + seconds, None
+        while time.time() < end and not (quiet and drawn and time.time() - drawn > quiet):
+            if select.select([fd], [], [], 0.2)[0]:
+                # Linux raises once the session has exited; macOS reads nothing.
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    raise OSError('the session exited')
+                screen.append(chunk)
+                drawn = time.time()
+
+    def say(text):
+        sent = len(main_loop(exchanges))
+        for ch in text:
+            os.write(fd, ch.encode())
+            drain(0.02)
+        drain(0.5)
+        os.write(fd, b'\r')
+        end = time.time() + 120
+        while time.time() < end and len(main_loop(exchanges)) == sent:
+            drain(0.5)
+        # The answer streams back after the request is recorded.
+        drain(5)
+
+    try:
+        drain(30, quiet=3)
+        # In a folder it doesn't trust, Claude Code first asks, and Enter would answer yes.
+        if re.search(rb'trust', b''.join(screen), re.I):
+            return f'Claude Code asks whether to trust {PLUGIN}; start it there once and answer yes'
+        say('Say ok.')
+        end = time.time() + 60
+        while time.time() < end and not os.path.exists(f'{cwd}/probe.py.connected'):
+            drain(0.5)
+        drain(2)
+        say('Say ok again.')
+    except OSError:
+        last = re.sub(rb'\x1b\[[0-9;?]*[A-Za-z]', b'', b''.join(screen))[-400:].decode(errors='replace')
+        return f'the interactive session exited early; its screen ended:\n{last}'
+    finally:
+        try:
+            os.killpg(pid, 9)
+        except OSError:
+            pass
+        os.waitpid(pid, 0)
+        os.close(fd)
+
+
+def main_loop(exchanges):
+    """The main loop's requests, and the compaction's; the side calls, such as titles, carry no ToolSearch."""
+    return [x for x in exchanges if any(t['name'] == 'ToolSearch' for t in x['request'].get('tools', []))]
 
 
 def texts(request):
@@ -207,6 +303,13 @@ def notice(request):
     """Every tool name the engine's notices and the mod's note in a request give. A notice is a
     heading, then one tool per line; the note one line."""
     return set(lines_after(request, NOTICE_HEADING)) | noted(request)
+
+
+def added(request):
+    """The tools a request's messages add with their definition, as the engine adds a deferred tool
+    that arrives after the first prompt."""
+    return {b['tool']['definition']['name'] for m in request['messages'] if isinstance(m['content'], list)
+            for b in m['content'] if b.get('type') == 'tool_addition'}
 
 
 def noted(request):
@@ -247,9 +350,7 @@ def main():
     def step(name, keep, prompts, *args):
         start = len(exchanges)
         session, tools, results = claude(cli, cwd, server.server_address[1], prompts, *args)
-        # The main loop's requests, and the compaction's; the side calls, such as titles, carry no ToolSearch.
-        requests = [x for x in exchanges[start:]
-                    if any(t['name'] == 'ToolSearch' for t in x['request'].get('tools', []))]
+        requests = main_loop(exchanges[start:])
         steps.append({'name': name, 'keep': keep, 'tools': tools, 'requests': requests, 'results': results})
         if 'mcp__less-bloat__setup' not in tools:
             failures.append(f'{name} has no setup tool')
@@ -289,6 +390,20 @@ def main():
         step('custom resume', custom, ['Say ok again.'], '--resume', session)
         if 'announced' in store():
             failures.append(f'a -p run, with nowhere to show it, recorded a notice as shown: {store()["announced"]}')
+        # The interactive session runs in this folder, where its transcript is the one with its id.
+        start, session = len(exchanges), str(uuid.uuid4())
+        transcript = f"{config}/projects/{re.sub(r'[^A-Za-z0-9]', '-', os.path.realpath(PLUGIN))}/{session}"
+        try:
+            stopped = interactive(cli, cwd, server.server_address[1], exchanges, session, 20)
+        finally:
+            if os.path.exists(f'{transcript}.jsonl'):
+                os.remove(f'{transcript}.jsonl')
+            shutil.rmtree(transcript, ignore_errors=True)
+        late = main_loop(exchanges[start:])
+        if stopped:
+            failures.append(stopped)
+        if any(n.startswith('mcp__probe__') for n in store().get('announced', [])):
+            failures.append(f'the interactive session tells of the late probe\'s tools as name-only: {store()["announced"]}')
     finally:
         for path in glob.glob(stores):
             os.remove(path)
@@ -366,6 +481,24 @@ def main():
         # placed under the old conversation.
         if len(noted(two[2]['request'])) > len(noted(two[0]['request'])):
             failures.append('the note after /clear names more tools than the first')
+
+    # The interactive session: the probe, which asks to stay loaded, connects after the first prompt,
+    # so its tools come in a message in full, pong's though custom mode doesn't keep it up-front, and
+    # the tools and system prompt stay as the first prompt sent them.
+    pong = 'mcp__probe__pong'
+    for i, x in enumerate(late):
+        report.append({'request': f'interactive, request {i + 1}', 'usage': x['usage']})
+    if len(late) < 2:
+        failures.append(f'the interactive session sent {len(late)} requests, not 2 or more')
+    elif pong in notice(late[0]['request']) | added(late[0]['request']) | {t['name'] for t in late[0]['request']['tools']}:
+        failures.append('the probe connected before the interactive session\'s first prompt, so nothing arrived late')
+    else:
+        if pong not in added(late[-1]['request']):
+            failures.append('the interactive session never adds pong, which arrived late, in a message')
+        for x in late[1:]:
+            for part in ('tools', 'system'):
+                if uncached(x['request'][part], True) != uncached(late[0]['request'][part], True):
+                    failures.append(f'the late probe changes the interactive session\'s {part}')
 
     print(json.dumps({'requests': report, 'failures': failures}, indent=2))
     print('FAIL' if failures else 'PASS')
