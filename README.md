@@ -13,10 +13,6 @@ One install -> ~50% less tokens in your system prompt
 | CLI, out-of-the-box | 29,954 | 15,173 | 49.3% |
 | Desktop app, out-of-the-box | ~61,900 | ~35,000 | ~44% |
 
-Measured on Claude Code 2.1.301: the first request of an interactive session after "hi", with a
-fresh config. Rerun it with `zsh scripts/bench.zsh`. The Desktop row is estimated from the CLI's
-measured change.
-
 Want to see it work? Ask Claude:
 
 > Start a new interactive Claude Code
