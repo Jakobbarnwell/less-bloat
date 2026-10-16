@@ -10,8 +10,12 @@ One install -> ~50% less tokens in your system prompt
 
 | Tokens to start a session | Without | With `less-bloat` | Savings (%) |
 | --- | --- | --- | --- |
-| CLI, out-of-the-box | 31,728 | 14,153 | 55.4% |
-| Desktop app, out-of-the-box | 63,712 | 33,983 | 46.7% |
+| CLI, out-of-the-box | 29,954 | 15,173 | 49.3% |
+| Desktop app, out-of-the-box | ~61,900 | ~35,000 | ~44% |
+
+Measured on Claude Code 2.1.301: the first request of an interactive session after "hi", with a
+fresh config. Rerun it with `zsh scripts/bench.zsh`. The Desktop row is estimated from the CLI's
+measured change.
 
 Want to see it work? Ask Claude:
 
@@ -116,7 +120,8 @@ ToolSearch is always described up-front, since Claude fetches all the others wit
 
 A plugin can read and write files, run commands and go online as you, so check what you
 install. `less-bloat` is about 600 lines of TypeScript in `hooks/`, and does none of these.
-(`scripts/check.py` is a test you run yourself; the plugin never runs it.) It keeps your choices,
+(`scripts/check.py` and `scripts/bench.zsh` are a test and a benchmark you run yourself; the
+plugin never runs them.) It keeps your choices,
 and which tools it has told you about, in Claude Code's own plugin store.
 
 </details>
