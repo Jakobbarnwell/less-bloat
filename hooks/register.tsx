@@ -5,7 +5,7 @@ import { buttons, choices, elsewhere, place, rows, toolCount, unlisted } from '.
 import type { Row } from './pane'
 import { CHANGE, changes, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
-import { firstSentence, fromSaved, isNames, upFrontTools, REQUIRED, same, toSaved } from './tools'
+import { firstSentence, fromSaved, isNames, isSentences, upFrontTools, REQUIRED, same, toSaved, withSentences } from './tools'
 import type { List, Pane } from '../types'
 
 // Terms (up-front, name-only, placement, asked, late, list) are defined at the top of tools.ts.
@@ -47,8 +47,7 @@ export const register: Register = on => {
     // Claude Code would put it up-front, but less-bloat made it name-only. Not so for a late tool: the
     // engine adds that in a message with its full description.
     const madeNameOnly = wasAsked && deferred && !late
-    const sentence = madeNameOnly ? firstSentence(result.description) : ''
-    await update($, { plugin: 'less-bloat', key: 'sentence', id }, first => first ?? sentence)
+    if (madeNameOnly) await remember($, e.tool, firstSentence(result.description))
     // A tool the user placed themselves needs no telling. (The saved list is read again after a reload
     // of the plugin, so it can be newer than the recorded placement.)
     if (madeNameOnly && !list.includes(e.tool) && !upFront.has(e.tool)) tell($, e.tool)
@@ -76,7 +75,9 @@ export const register: Register = on => {
     const nameOnly = tools.filter(n => !upFront.has(n))
     const { version } = await $.state.set(firstPromptTools, tools)
     const described = await deferrals($, tools)
-    const unnamed = tools.includes('ToolSearch') ? nameOnly.filter(n => !(n in described)) : []
+    // A resumed conversation's first prompt went out in an earlier process, with its note.
+    const resumed = await $.session.messages().then(rows => rows.some(m => m.role === 'assistant'), () => false)
+    const unnamed = tools.includes('ToolSearch') && !resumed ? nameOnly.filter(n => !(n in described)) : []
     const result = await next(unnamed.length ? { ...e, context: [...(e.context ?? []), NOTE + unnamed.join(', ')] } : e)
     // A blocked prompt sent nothing, so the next one is still the first, unless another went out since.
     if (result.drop !== undefined) await $.state.set(firstPromptTools, null, { ifVersion: version })
@@ -119,17 +120,13 @@ export const register: Register = on => {
 
   // A name-only tool that asked for its full description gets its first sentence where the engine
   // lists it by name, so Claude knows what it's for. Each agent's list names only its own tools.
+  // The engine renders a listing again for every request, and a resumed process before its servers
+  // connect, so the text depends on the listing and the saved sentences alone: the same listing reads
+  // the same each time, and the prompt cache holds.
   on('prompt.attachment', { type: 'deferred_tools_delta' }, async ($, e, next) => {
     const result = await next(e)
     if (!result.text) return result
-    const session = await $.session.id()
-    // Lines that aren't a current tool's name: headings, and tools no longer available.
-    const tools = new Set((await $.tool.list()).map(t => t.name))
-    const lines = await Promise.all(result.text.split('\n').map(async line => {
-      const sentence = tools.has(line) && await read($, { plugin: 'less-bloat', key: 'sentence', id: `${session}:${line}` })
-      return sentence ? `${line}: ${sentence}` : line
-    }))
-    return { text: lines.join('\n') }
+    return { text: withSentences(result.text, await sentences($)) }
   })
 
   // /less-bloat opens the pane, or prints the list where it can't be drawn.
@@ -331,6 +328,25 @@ async function show($: EngineInterface) {
 async function announced($: EngineInterface): Promise<string[] | undefined> {
   const told = await $.store.get('announced')
   return isNames(told) ? told : undefined
+}
+
+// The first sentence of each tool that asked for its full description and got its name only, kept
+// across sessions and processes. A sentence is learned once, as its tool is described, and replaced
+// only when its description changes.
+async function sentences($: EngineInterface): Promise<Record<string, string>> {
+  const kept = await $.store.get('sentences').catch(() => undefined)
+  return isSentences(kept) ? kept : {}
+}
+
+// One write at a time, so tools described at once don't drop each other's sentence.
+let remembering: Promise<void> = Promise.resolve()
+function remember($: EngineInterface, tool: string, sentence: string): Promise<void> {
+  if (!sentence) return remembering
+  remembering = remembering.then(async () => {
+    const kept = await sentences($)
+    if (kept[tool] !== sentence) await $.store.set('sentences', { ...kept, [tool]: sentence })
+  }).catch(() => {})
+  return remembering
 }
 
 // Custom mode's list. None saved, or unreadable, is default mode's empty list.
