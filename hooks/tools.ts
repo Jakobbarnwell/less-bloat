@@ -47,10 +47,13 @@ export function isSentences(value: unknown): value is Record<string, string> {
 // The engine's list of name-only tools, each line that names a tool with a saved sentence given it.
 // Only the list of tools now available behind ToolSearch: not those just loaded in full, nor those no
 // longer available.
+// A line the engine describes itself (`name: text`) stays in its list; any other line that names no
+// tool starts the next part.
 const LISTING = 'deferred tools are now available'
 export function withSentences(text: string, sentences: Record<string, string>): string {
   let listing = false
   return text.split('\n').map(line => {
+    if (/^[\w-]+: /.test(line)) return line
     if (!/^[\w-]+$/.test(line)) {
       listing = line.includes(LISTING)
       return line

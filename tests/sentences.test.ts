@@ -8,6 +8,7 @@ const LISTING = [
   'mcp__docs__batch',
   '',
   'The following deferred tools are now available via ToolSearch. Their schemas are NOT loaded:',
+  'ScheduleWakeup: schedules when this session resumes work.',
   'Workflow',
   'mcp__docs__read',
   'WebFetch',
@@ -24,8 +25,9 @@ test('leaves the tools no longer available by name', async () => {
   expect(withSentences(removed, SENTENCES)).toBe(removed)
 })
 
-// The same listing renders the same way every time, whatever has connected: the prompt cache holds.
-test('depends on the listing and the sentences alone', async () => {
-  expect(withSentences(LISTING, SENTENCES)).toBe(withSentences(LISTING, { ...SENTENCES }))
-  expect(withSentences(LISTING, {})).toBe(LISTING)
+// A resumed process renders the listing before its servers connect, and with none of the last
+// process's memory: the sentences saved earlier give the same text.
+test('gives a disconnected tool its saved sentence', async () => {
+  const docs = 'The following deferred tools are now available via ToolSearch:\nmcp__docs__read'
+  expect(withSentences(docs, { mcp__docs__read: 'Read a doc.' })).toBe(`${docs}: Read a doc.`)
 })
