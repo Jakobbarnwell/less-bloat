@@ -47,7 +47,7 @@ export const register: Register = on => {
     // Claude Code would put it up-front, but less-bloat made it name-only. Not so for a late tool: the
     // engine adds that in a message with its full description.
     const madeNameOnly = wasAsked && deferred && !late
-    if (madeNameOnly) await remember($, e.tool, firstSentence(result.description))
+    if (madeNameOnly) await remember($, e.tool, firstSentence(result.description)).catch(() => {})
     // A tool the user placed themselves needs no telling. (The saved list is read again after a reload
     // of the plugin, so it can be newer than the recorded placement.)
     if (madeNameOnly && !list.includes(e.tool) && !upFront.has(e.tool)) tell($, e.tool)
@@ -341,9 +341,10 @@ async function sentences($: EngineInterface): Promise<Record<string, string>> {
   return Object.fromEntries(kept.filter((entry): entry is readonly [string, string] => typeof entry[1] === 'string'))
 }
 
+// Two processes saving a new tool at once save the same sentence. A store that can't be read saves nothing.
 async function remember($: EngineInterface, tool: string, sentence: string) {
   const key = SENTENCE + tool
-  if (sentence && (await $.store.get(key).catch(() => undefined)) === undefined) await $.store.set(key, sentence).catch(() => {})
+  if (sentence && (await $.store.get(key)) === undefined) await $.store.set(key, sentence)
 }
 
 // Custom mode's list. None saved, or unreadable, is default mode's empty list.
