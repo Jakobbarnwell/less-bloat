@@ -5,7 +5,7 @@ import { buttons, choices, elsewhere, place, rows, toolCount, unlisted } from '.
 import type { Row } from './pane'
 import { CHANGE, changes, COMMAND, notice, report, SETUP, warnings } from './setup'
 import type { Input } from './setup'
-import { firstSentence, fromSaved, isNames, isSentences, upFrontTools, REQUIRED, same, toSaved, withSentences } from './tools'
+import { firstSentence, fromSaved, isNames, upFrontTools, REQUIRED, same, toSaved, withSentences } from './tools'
 import type { List, Pane } from '../types'
 
 // Terms (up-front, name-only, placement, asked, late, list) are defined at the top of tools.ts.
@@ -331,22 +331,19 @@ async function announced($: EngineInterface): Promise<string[] | undefined> {
 }
 
 // The first sentence of each tool that asked for its full description and got its name only, kept
-// across sessions and processes. A sentence is learned once, as its tool is described, and replaced
-// only when its description changes.
+// across sessions and processes, one key per tool so processes saving at once don't drop each other's.
+// The first sentence saved stays, even if the description changes, so a listing renders the same way
+// in every later request.
+const SENTENCE = 'sentence:'
 async function sentences($: EngineInterface): Promise<Record<string, string>> {
-  const kept = await $.store.get('sentences').catch(() => undefined)
-  return isSentences(kept) ? kept : {}
+  const keys = (await $.store.keys().catch(() => [])).filter(k => k.startsWith(SENTENCE))
+  const kept = await Promise.all(keys.map(async k => [k.slice(SENTENCE.length), await $.store.get(k).catch(() => undefined)] as const))
+  return Object.fromEntries(kept.filter((entry): entry is readonly [string, string] => typeof entry[1] === 'string'))
 }
 
-// One write at a time, so tools described at once don't drop each other's sentence.
-let remembering: Promise<void> = Promise.resolve()
-function remember($: EngineInterface, tool: string, sentence: string): Promise<void> {
-  if (!sentence) return remembering
-  remembering = remembering.then(async () => {
-    const kept = await sentences($)
-    if (kept[tool] !== sentence) await $.store.set('sentences', { ...kept, [tool]: sentence })
-  }).catch(() => {})
-  return remembering
+async function remember($: EngineInterface, tool: string, sentence: string) {
+  const key = SENTENCE + tool
+  if (sentence && (await $.store.get(key).catch(() => undefined)) === undefined) await $.store.set(key, sentence).catch(() => {})
 }
 
 // Custom mode's list. None saved, or unreadable, is default mode's empty list.

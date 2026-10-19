@@ -39,11 +39,6 @@ export function isConnectorId(server: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(server)
 }
 
-export function isSentences(value: unknown): value is Record<string, string> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    && Object.values(value).every(s => typeof s === 'string')
-}
-
 // The engine's list of name-only tools, each line that names a tool with a saved sentence given it.
 // Only the list of tools now available behind ToolSearch: not those just loaded in full, nor those no
 // longer available.
